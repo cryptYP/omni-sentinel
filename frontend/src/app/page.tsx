@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { sepolia } from "thirdweb/chains";
 import { client } from "@/lib/thirdweb";
-import { useDefiProtocols, DEMO_MARKETS } from "@/lib/hooks";
+import { useDefiProtocols, getDemoMarkets } from "@/lib/hooks";
 import { WorldIDAuth } from "@/components/WorldIDAuth";
 import { RiskChart } from "@/components/RiskChart";
 import { MarketCard } from "@/components/MarketCard";
@@ -33,8 +33,15 @@ export default function Home() {
   const [newQuestion, setNewQuestion] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
   const [isWorldIdVerified, setIsWorldIdVerified] = useState(false);
-  const [markets, setMarkets] = useState(DEMO_MARKETS);
+  const [markets, setMarkets] = useState<ReturnType<typeof getDemoMarkets>>([]);
   const [activeTab, setActiveTab] = useState<"markets" | "create">("markets");
+  const [mounted, setMounted] = useState(false);
+
+  // Initialize demo markets on client only to avoid hydration mismatch
+  useEffect(() => {
+    setMarkets(getDemoMarkets());
+    setMounted(true);
+  }, []);
   const account = useActiveAccount();
 
   const { protocols, loading: protocolsLoading } = useDefiProtocols();

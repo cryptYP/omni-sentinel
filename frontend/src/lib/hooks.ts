@@ -73,55 +73,59 @@ export function useProtocolDetail(protocol: string) {
 }
 
 // Pre-built prediction markets (demo data that works without blockchain)
-export const DEMO_MARKETS = [
-  {
-    id: 0,
-    question: "Will Aave maintain TVL above $30B through March 2026?",
-    deadline: Math.floor(Date.now() / 1000) + 7 * 86400,
-    yesPool: 2.45,
-    noPool: 0.82,
-    resolved: false,
-    category: "TVL",
-    protocol: "Aave",
-  },
-  {
-    id: 1,
-    question: "Will Lido's staking ratio stay above 28% of ETH supply?",
-    deadline: Math.floor(Date.now() / 1000) + 14 * 86400,
-    yesPool: 1.2,
-    noPool: 1.8,
-    resolved: false,
-    category: "Staking",
-    protocol: "Lido",
-  },
-  {
-    id: 2,
-    question: "Will Compound avoid any liquidation events > $10M this week?",
-    deadline: Math.floor(Date.now() / 1000) + 5 * 86400,
-    yesPool: 3.1,
-    noPool: 0.45,
-    resolved: false,
-    category: "Safety",
-    protocol: "Compound",
-  },
-  {
-    id: 3,
-    question: "Will Sky (Maker) DAI maintain its $1 peg within 0.5%?",
-    deadline: Math.floor(Date.now() / 1000) + 3 * 86400,
-    yesPool: 5.0,
-    noPool: 0.3,
-    resolved: false,
-    category: "Stability",
-    protocol: "Sky/Maker",
-  },
-  {
-    id: 4,
-    question: "Will total DeFi TVL exceed $120B by end of week?",
-    deadline: Math.floor(Date.now() / 1000) + 7 * 86400,
-    yesPool: 1.5,
-    noPool: 2.1,
-    resolved: false,
-    category: "Market",
-    protocol: "DeFi",
-  },
-];
+// Use fixed deadlines to avoid server/client hydration mismatch
+export function getDemoMarkets() {
+  const now = Math.floor(Date.now() / 1000);
+  return [
+    {
+      id: 0,
+      question: "Will Aave maintain TVL above $30B through March 2026?",
+      deadline: now + 7 * 86400,
+      yesPool: 2.45,
+      noPool: 0.82,
+      resolved: false,
+      category: "TVL",
+      protocol: "Aave",
+    },
+    {
+      id: 1,
+      question: "Will Lido's staking ratio stay above 28% of ETH supply?",
+      deadline: now + 14 * 86400,
+      yesPool: 1.2,
+      noPool: 1.8,
+      resolved: false,
+      category: "Staking",
+      protocol: "Lido",
+    },
+    {
+      id: 2,
+      question: "Will Compound avoid any liquidation events > $10M this week?",
+      deadline: now + 5 * 86400,
+      yesPool: 3.1,
+      noPool: 0.45,
+      resolved: false,
+      category: "Safety",
+      protocol: "Compound",
+    },
+    {
+      id: 3,
+      question: "Will Sky (Maker) DAI maintain its $1 peg within 0.5%?",
+      deadline: now + 3 * 86400,
+      yesPool: 5.0,
+      noPool: 0.3,
+      resolved: false,
+      category: "Stability",
+      protocol: "Sky/Maker",
+    },
+    {
+      id: 4,
+      question: "Will total DeFi TVL exceed $120B by end of week?",
+      deadline: now + 7 * 86400,
+      yesPool: 1.5,
+      noPool: 2.1,
+      resolved: false,
+      category: "Market",
+      protocol: "DeFi",
+    },
+  ];
+}

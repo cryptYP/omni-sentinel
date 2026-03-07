@@ -1,7 +1,7 @@
 "use client";
 
 import { useActiveAccount } from "thirdweb/react";
-import { useDefiProtocols, DEMO_MARKETS } from "@/lib/hooks";
+import { useDefiProtocols } from "@/lib/hooks";
 import { Wallet, Shield, TrendingUp, ExternalLink } from "lucide-react";
 
 export function Portfolio({ isVerified }: { isVerified: boolean }) {
@@ -56,7 +56,7 @@ export function Portfolio({ isVerified }: { isVerified: boolean }) {
         </div>
         <div className="rounded-lg bg-[hsl(var(--background))] p-2.5 text-center">
           <p className="text-[9px] text-[hsl(var(--muted))]">Markets</p>
-          <p className="text-sm font-bold">{DEMO_MARKETS.length}</p>
+          <p className="text-sm font-bold">5</p>
         </div>
         <div className="rounded-lg bg-[hsl(var(--background))] p-2.5 text-center">
           <p className="text-[9px] text-[hsl(var(--muted))]">Protocols</p>

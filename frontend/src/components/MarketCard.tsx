@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Clock, Lock, Users, Zap } from "lucide-react";
 
 type Market = {
@@ -28,15 +28,20 @@ export function MarketCard({
   const [localNo, setLocalNo] = useState(market.noPool);
   const [userBet, setUserBet] = useState<"yes" | "no" | null>(null);
   const [betting, setBetting] = useState(false);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    setNow(Math.floor(Date.now() / 1000));
+  }, []);
 
   const totalPool = localYes + localNo;
   const yesPct = totalPool > 0 ? (localYes / totalPool) * 100 : 50;
   const noPct = 100 - yesPct;
 
-  const timeLeft = market.deadline - Math.floor(Date.now() / 1000);
+  const timeLeft = now > 0 ? market.deadline - now : market.deadline - market.deadline;
   const daysLeft = Math.max(0, Math.floor(timeLeft / 86400));
   const hoursLeft = Math.max(0, Math.floor((timeLeft % 86400) / 3600));
-  const isExpired = timeLeft <= 0;
+  const isExpired = now > 0 && timeLeft <= 0;
 
   function handleBet(isYes: boolean) {
     if (!isVerified) return;
