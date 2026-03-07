@@ -1,0 +1,12 @@
+{
+  "schedule": "*/5 * * * *",
+  "geminiApiUrl": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+  "defiLlamaApiUrl": "https://api.llama.fi/tvl/aave",
+  "evms": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia",
+      "riskOracleContractAddress": "0xYOUR_RISK_ORACLE_ADDRESS"
+    }
+  ],
+  "gasLimit": 500000
+}

@@ -1,0 +1,12 @@
+{
+  "schedule": "* * * * *",
+  "evms": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia",
+      "riskOracleAddress": "0xYOUR_RISK_ORACLE_ADDRESS",
+      "safeguardControllerAddress": "0xYOUR_SAFEGUARD_CONTROLLER_ADDRESS"
+    }
+  ],
+  "riskThreshold": 70,
+  "gasLimit": 300000
+}

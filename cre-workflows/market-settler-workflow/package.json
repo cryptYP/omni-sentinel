@@ -1,0 +1,15 @@
+{
+  "name": "market-settler-workflow",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build main.ts --outdir dist",
+    "simulate": "cre workflow simulate market-settler-workflow --target staging-settings"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "latest",
+    "viem": "2.21.0",
+    "zod": "3.23.8"
+  }
+}
