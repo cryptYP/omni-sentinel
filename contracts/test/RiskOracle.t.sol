@@ -9,6 +9,8 @@ contract RiskOracleTest is Test {
     address public forwarder = address(0x1);
     address public owner;
 
+    event SafeguardAlert(bytes32 indexed protocolId, uint256 riskScore, string severity);
+
     function setUp() public {
         owner = address(this);
         oracle = new RiskOracle(forwarder);
@@ -50,7 +52,7 @@ contract RiskOracleTest is Test {
 
         vm.prank(forwarder);
         vm.expectEmit(true, false, false, true);
-        emit RiskOracle.SafeguardAlert(protocolId, 95, "CRITICAL");
+        emit SafeguardAlert(protocolId, 95, "CRITICAL");
         oracle.onReport("", abi.encode(score));
     }
 
