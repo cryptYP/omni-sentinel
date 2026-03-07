@@ -1,0 +1,10 @@
+{
+  "geminiApiUrl": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+  "evms": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia",
+      "predictionMarketAddress": "0x1255d87986784f9999dB996797d896DbD5456881",
+      "gasLimit": "500000"
+    }
+  ]
+}

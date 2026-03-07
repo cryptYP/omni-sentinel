@@ -65,7 +65,7 @@ export function SafeguardStatus() {
         </h3>
         {history && (history as unknown[]).length > 0 ? (
           <div className="space-y-2">
-            {(history as Array<{
+            {(history as unknown as Array<{
               riskScore: bigint;
               action: number;
               executedAt: bigint;

@@ -45,7 +45,7 @@ export function PredictionMarkets() {
       method: "createMarket",
       params: [newQuestion, deadlineUnix],
     });
-    sendTx(tx, {
+    sendTx(tx as any, {
       onSuccess: () => {
         setNewQuestion("");
         setNewDeadline("");
@@ -60,7 +60,7 @@ export function PredictionMarkets() {
       params: [BigInt(selectedMarket), isYes],
       value: parseEther(stakeAmount),
     });
-    sendTx(tx, { onSuccess: () => refetchMarket() });
+    sendTx(tx as any, { onSuccess: () => refetchMarket() });
   }
 
   function handleRequestSettlement() {
@@ -69,7 +69,7 @@ export function PredictionMarkets() {
       method: "requestSettlement",
       params: [BigInt(selectedMarket)],
     });
-    sendTx(tx);
+    sendTx(tx as any);
   }
 
   function handleClaimWinnings() {
@@ -78,7 +78,7 @@ export function PredictionMarkets() {
       method: "claimWinnings",
       params: [BigInt(selectedMarket)],
     });
-    sendTx(tx);
+    sendTx(tx as any);
   }
 
   return (

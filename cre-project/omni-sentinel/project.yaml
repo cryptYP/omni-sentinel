@@ -1,0 +1,13 @@
+# ==========================================================================
+# CRE PROJECT SETTINGS FILE — OmniSentinel
+# ==========================================================================
+
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      url: https://virtual.sepolia.eu.rpc.tenderly.co/bb5b6971-86f6-4f83-8017-7ddd7d27ced7
+
+production-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      url: https://virtual.sepolia.eu.rpc.tenderly.co/bb5b6971-86f6-4f83-8017-7ddd7d27ced7
