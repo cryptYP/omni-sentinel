@@ -76,17 +76,17 @@ All CRE workflow files and smart contracts that use Chainlink:
 ## Deployments
 
 ### Tenderly Virtual TestNet
-- **Explorer Link:** `[INSERT TENDERLY EXPLORER LINK]`
+- **Explorer Link:** https://dashboard.tenderly.co/explorer/vnet/69edc2ec-13a2-491f-aa7e-88c38dab91fe/transactions
 - **Chain ID:** 73571 (forked from Sepolia)
 - All contracts deployed and verified with transaction history
 
 ### Contract Addresses
 | Contract | Address |
 |----------|---------|
-| RiskOracle | `[INSERT ADDRESS]` |
-| PredictionMarket | `[INSERT ADDRESS]` |
-| SafeguardController | `[INSERT ADDRESS]` |
-| WorldIDVerifier | `[INSERT ADDRESS]` |
+| RiskOracle | `0x245B19D0c4b42654fD7b7BaaCA16E2C74d88e97b` |
+| PredictionMarket | `0x1255d87986784f9999dB996797d896DbD5456881` |
+| SafeguardController | `0x148cef7215C21713F7b0A211703CB0d10bc91239` |
+| WorldIDVerifier | `0x4940C1aaf77658480aD2B2220fC99Ae62795D7D6` |
 
 ## World ID Integration
 
