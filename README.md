@@ -78,7 +78,7 @@ All CRE workflow files and smart contracts that use Chainlink:
 ### Tenderly Virtual TestNet
 - **Explorer Link:** https://dashboard.tenderly.co/explorer/vnet/69edc2ec-13a2-491f-aa7e-88c38dab91fe/transactions
 - **Chain ID:** 73571 (forked from Sepolia)
-- All contracts deployed and verified with transaction history
+- **On-chain Activity:** 80+ transactions including contract deployments, risk score updates across 3 protocols (Aave, Compound, Lido), prediction market creation with multi-user ETH staking, and safeguard circuit breaker cycles (PAUSE/LIMITED/EMERGENCY/RESET)
 
 ### Contract Addresses
 | Contract | Address |
@@ -103,6 +103,23 @@ All CRE workflow files and smart contracts that use Chainlink:
 - All smart contracts deployed via Foundry
 - CRE workflow execution validated against the Virtual TestNet
 - Used for safe testing without spending real testnet ETH
+- 80+ on-chain transactions demonstrating full system lifecycle:
+  - 34 RiskOracle updates across 3 protocol IDs (Aave, Compound, Lido)
+  - 7 prediction markets with multi-user YES/NO positions
+  - 8 safeguard circuit breaker state transitions
+  - 4 World ID user verifications
+
+## Testing
+
+Run the automated test suite:
+
+```bash
+cd test-scenarios
+chmod +x run-all-tests.sh
+./run-all-tests.sh
+```
+
+See [test-scenarios/](./test-scenarios/) for detailed test cases, interaction guides, and the quick install guide.
 
 ## thirdweb Integration
 
