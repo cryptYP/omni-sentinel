@@ -35,3 +35,10 @@ export const STATUS_LABELS: Record<number, { label: string; color: string }> = {
   2: { label: "LIMITED", color: "text-risk-high" },
   3: { label: "EMERGENCY", color: "text-risk-critical" },
 };
+
+export function encodeBytes32String(str: string): string {
+  const hex = Array.from(new TextEncoder().encode(str))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return "0x" + hex.padEnd(64, "0");
+}

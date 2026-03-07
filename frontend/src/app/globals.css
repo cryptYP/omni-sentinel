@@ -15,22 +15,44 @@
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(222, 30%, 20%);
+    border-radius: 3px;
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6;
+    @apply rounded-xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5;
   }
 
   .btn-primary {
-    @apply rounded-lg bg-sentinel-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-sentinel-700 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply rounded-lg bg-sentinel-600 px-4 py-2.5 font-medium text-white transition-all hover:bg-sentinel-700 hover:shadow-lg hover:shadow-sentinel-600/10 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-outline {
-    @apply rounded-lg border border-[hsl(var(--card-border))] px-4 py-2.5 font-medium transition-colors hover:bg-white/5;
+    @apply rounded-lg border border-[hsl(var(--card-border))] px-4 py-2.5 font-medium transition-all hover:bg-white/5 hover:border-[hsl(222,30%,25%)];
   }
 
   .risk-badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold;
   }
+}
+
+/* Recharts tooltip override */
+.recharts-tooltip-wrapper {
+  outline: none !important;
 }
