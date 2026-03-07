@@ -178,10 +178,10 @@ npm run dev
 ```
 
 ## Video Demo
-[INSERT VIDEO LINK — 3-5 minutes, publicly viewable]
+youtube.com [taken away insertion]
 
 ## Team
-[INSERT TEAM MEMBERS]
+YP & AS
 
 ---
 
