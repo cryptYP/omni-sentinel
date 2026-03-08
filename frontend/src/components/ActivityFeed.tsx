@@ -1,3 +1,13 @@
+/**
+ * System Activity Feed
+ *
+ * Generates a live activity feed from protocol data, including simulated
+ * CRE workflow events (RiskMonitor score updates, SafeguardTrigger checks,
+ * MarketSettler resolutions). Updates dynamically based on live protocol data.
+ *
+ * Sponsors: Chainlink CRE (simulated workflow events),
+ * DeFi Llama (protocol data via hooks)
+ */
 "use client";
 
 import { useState, useEffect } from "react";

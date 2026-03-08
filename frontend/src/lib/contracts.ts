@@ -1,6 +1,22 @@
+/**
+ * Smart Contract Definitions — OmniSentinel
+ *
+ * ABI fragments and contract instances for RiskOracle, PredictionMarket,
+ * and SafeguardController. Deployed on Tenderly VTestNet (Chain ID 73571).
+ *
+ * Sponsors: thirdweb (getContract, defineChain), Tenderly VTestNet (chain config)
+ */
 import { getContract } from "thirdweb";
-import { sepolia } from "thirdweb/chains";
+import { defineChain } from "thirdweb/chains";
 import { client } from "./thirdweb";
+
+// Tenderly Virtual TestNet (Chain ID 73571)
+export const tenderlyVTestNet = defineChain({
+  id: 73571,
+  name: "Tenderly Virtual TestNet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  testnet: true,
+});
 
 // ABI fragments for our contracts
 export const RISK_ORACLE_ABI = [
@@ -146,7 +162,7 @@ export const SAFEGUARD_ABI = [
 export function getRiskOracle() {
   return getContract({
     client,
-    chain: sepolia,
+    chain: tenderlyVTestNet,
     address: process.env.NEXT_PUBLIC_RISK_ORACLE_ADDRESS as `0x${string}`,
     abi: RISK_ORACLE_ABI,
   });
@@ -155,7 +171,7 @@ export function getRiskOracle() {
 export function getPredictionMarket() {
   return getContract({
     client,
-    chain: sepolia,
+    chain: tenderlyVTestNet,
     address: process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS as `0x${string}`,
     abi: PREDICTION_MARKET_ABI,
   });
@@ -164,7 +180,7 @@ export function getPredictionMarket() {
 export function getSafeguardController() {
   return getContract({
     client,
-    chain: sepolia,
+    chain: tenderlyVTestNet,
     address: process.env.NEXT_PUBLIC_SAFEGUARD_CONTROLLER_ADDRESS as `0x${string}`,
     abi: SAFEGUARD_ABI,
   });

@@ -1,3 +1,12 @@
+/**
+ * Data Hooks — OmniSentinel
+ *
+ * useDefiProtocols: Fetches live protocol data (TVL, risk scores) from DeFi Llama API.
+ * useProtocolDetail: Fetches detailed protocol history (risk history, TVL history).
+ * getDemoMarkets: Generates demo prediction markets for the UI.
+ *
+ * Sponsors: DeFi Llama (data source via /api/defi routes)
+ */
 "use client";
 
 import { useState, useEffect } from "react";

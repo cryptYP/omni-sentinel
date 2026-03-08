@@ -9,6 +9,29 @@
     --card: 222 47% 7%;
     --card-border: 222 30% 15%;
     --muted: 215 20% 65%;
+
+    /* Dynamic settings overrides */
+    --risk-low: #40c057;
+    --risk-med: #fab005;
+    --risk-high: #fd7e14;
+    --risk-crit: #fa5252;
+    --radius-base: 0.75rem;
+    --radius-card: 0.75rem;
+    --font-scale: 1;
+    --spacing-scale: 1;
+    --accent-h: 231;
+    --accent-s: 48%;
+    --accent-l: 48%;
+    --chart-height: 16rem;
+  }
+
+  /* Light mode overrides */
+  :root.theme-light {
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-border: 220 13% 87%;
+    --muted: 215 16% 47%;
   }
 
   body {
@@ -16,9 +39,10 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  /* Smooth scrolling */
+  /* Smooth scrolling + dynamic font scaling */
   html {
     scroll-behavior: smooth;
+    font-size: calc(16px * var(--font-scale));
   }
 
   /* Custom scrollbar */
@@ -36,20 +60,77 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5;
+    border-radius: var(--radius-card);
+    @apply border border-[hsl(var(--card-border))] bg-[hsl(var(--card))];
+    padding: calc(1.25rem * var(--spacing-scale));
   }
 
   .btn-primary {
-    @apply rounded-lg bg-sentinel-600 px-4 py-2.5 font-medium text-white transition-all hover:bg-sentinel-700 hover:shadow-lg hover:shadow-sentinel-600/10 disabled:cursor-not-allowed disabled:opacity-50;
+    border-radius: var(--radius-base);
+    @apply bg-sentinel-600 px-4 py-2.5 font-medium text-white transition-all hover:bg-sentinel-700 hover:shadow-lg hover:shadow-sentinel-600/10 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-outline {
-    @apply rounded-lg border border-[hsl(var(--card-border))] px-4 py-2.5 font-medium transition-all hover:bg-white/5 hover:border-[hsl(222,30%,25%)];
+    border-radius: var(--radius-base);
+    @apply border border-[hsl(var(--card-border))] px-4 py-2.5 font-medium transition-all hover:bg-white/5 hover:border-[hsl(222,30%,25%)];
   }
 
   .risk-badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold;
   }
+}
+
+/* Dynamic risk colors via CSS variables */
+.text-risk-low { color: var(--risk-low) !important; }
+.text-risk-medium { color: var(--risk-med) !important; }
+.text-risk-high { color: var(--risk-high) !important; }
+.text-risk-critical { color: var(--risk-crit) !important; }
+.bg-risk-low { background-color: var(--risk-low) !important; }
+.bg-risk-medium { background-color: var(--risk-med) !important; }
+.bg-risk-high { background-color: var(--risk-high) !important; }
+.bg-risk-critical { background-color: var(--risk-crit) !important; }
+
+/* Partial opacity variants for risk colors */
+.bg-risk-low\/5 { background-color: color-mix(in srgb, var(--risk-low) 5%, transparent) !important; }
+.bg-risk-low\/10 { background-color: color-mix(in srgb, var(--risk-low) 10%, transparent) !important; }
+.bg-risk-low\/15 { background-color: color-mix(in srgb, var(--risk-low) 15%, transparent) !important; }
+.bg-risk-low\/25 { background-color: color-mix(in srgb, var(--risk-low) 25%, transparent) !important; }
+.bg-risk-low\/80 { background-color: color-mix(in srgb, var(--risk-low) 80%, transparent) !important; }
+.bg-risk-high\/5 { background-color: color-mix(in srgb, var(--risk-high) 5%, transparent) !important; }
+.bg-risk-high\/10 { background-color: color-mix(in srgb, var(--risk-high) 10%, transparent) !important; }
+.bg-risk-critical\/5 { background-color: color-mix(in srgb, var(--risk-crit) 5%, transparent) !important; }
+.bg-risk-critical\/10 { background-color: color-mix(in srgb, var(--risk-crit) 10%, transparent) !important; }
+.bg-risk-critical\/15 { background-color: color-mix(in srgb, var(--risk-crit) 15%, transparent) !important; }
+.bg-risk-critical\/25 { background-color: color-mix(in srgb, var(--risk-crit) 25%, transparent) !important; }
+.bg-risk-critical\/80 { background-color: color-mix(in srgb, var(--risk-crit) 80%, transparent) !important; }
+.border-risk-low\/20 { border-color: color-mix(in srgb, var(--risk-low) 20%, transparent) !important; }
+.border-risk-high\/20 { border-color: color-mix(in srgb, var(--risk-high) 20%, transparent) !important; }
+.border-risk-critical\/10 { border-color: color-mix(in srgb, var(--risk-crit) 10%, transparent) !important; }
+.border-risk-critical\/20 { border-color: color-mix(in srgb, var(--risk-crit) 20%, transparent) !important; }
+
+/* Dynamic sentinel accent overrides */
+:root:not(:has(body)) .sentinel-override,
+:root {
+  --tw-sentinel-600: var(--sentinel-600, #4c6ef5);
+  --tw-sentinel-400: var(--sentinel-400, #748ffc);
+}
+.text-sentinel-400 { color: var(--sentinel-400, #748ffc) !important; }
+.text-sentinel-600 { color: var(--sentinel-600, #4c6ef5) !important; }
+.bg-sentinel-600 { background-color: var(--sentinel-600, #4c6ef5) !important; }
+.bg-sentinel-600\/5 { background-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 5%, transparent) !important; }
+.bg-sentinel-600\/10 { background-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 10%, transparent) !important; }
+.bg-sentinel-600\/20 { background-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 20%, transparent) !important; }
+.border-sentinel-600\/30 { border-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 30%, transparent) !important; }
+.border-sentinel-600\/40 { border-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 40%, transparent) !important; }
+.hover\:bg-sentinel-600\/20:hover { background-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 20%, transparent) !important; }
+.hover\:bg-sentinel-700:hover { background-color: color-mix(in srgb, var(--sentinel-600, #4c6ef5) 85%, black) !important; }
+
+/* Dynamic border radius overrides */
+@layer utilities {
+  .rounded-xl { border-radius: var(--radius-base) !important; }
+  .rounded-lg { border-radius: var(--radius-base) !important; }
+  .rounded-md { border-radius: calc(var(--radius-base) * 0.67) !important; }
+  .rounded { border-radius: calc(var(--radius-base) * 0.5) !important; }
 }
 
 /* Recharts tooltip override */

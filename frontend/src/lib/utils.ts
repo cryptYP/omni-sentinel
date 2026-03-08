@@ -1,3 +1,10 @@
+/**
+ * Utility Functions — OmniSentinel
+ *
+ * Shared helpers: className merging (cn), risk score formatting,
+ * address formatting, ETH conversion, timestamp formatting,
+ * safeguard status labels, and bytes32 encoding.
+ */
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 

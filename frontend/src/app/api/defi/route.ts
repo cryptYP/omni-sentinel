@@ -1,3 +1,11 @@
+/**
+ * DeFi Protocol List API — /api/defi
+ *
+ * Fetches live TVL and metadata for monitored protocols (Aave, Lido, Compound,
+ * Maker, Uniswap) from DeFi Llama API. Computes risk scores from TVL tiers.
+ *
+ * Sponsors: DeFi Llama (defillama-datasets.llama.fi)
+ */
 import { NextResponse } from "next/server";
 
 const PROTOCOL_SEARCHES = [

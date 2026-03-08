@@ -73,6 +73,25 @@ All CRE workflow files and smart contracts that use Chainlink:
 - [PredictionMarket Tests](./contracts/test/PredictionMarket.t.sol)
 - [SafeguardController Tests](./contracts/test/SafeguardController.t.sol)
 
+### Frontend Files (Next.js + thirdweb)
+- [layout.tsx](./frontend/src/app/layout.tsx) — Root layout, ThirdwebProvider wrapper (**thirdweb**)
+- [page.tsx](./frontend/src/app/page.tsx) — Main dashboard: Consumer, Developer, Settings views (**thirdweb, World ID, CRE, Tenderly, DeFi Llama**)
+- [globals.css](./frontend/src/app/globals.css) — Theme system with dynamic CSS variables for settings
+- [error.tsx](./frontend/src/app/error.tsx) — Error boundary component
+- [not-found.tsx](./frontend/src/app/not-found.tsx) — 404 page
+- [/api/defi/route.ts](./frontend/src/app/api/defi/route.ts) — Protocol list API, live TVL from **DeFi Llama**
+- [/api/defi/[protocol]/route.ts](./frontend/src/app/api/defi/%5Bprotocol%5D/route.ts) — Protocol detail API, dynamic risk scoring from **DeFi Llama**
+- [/api/verify-worldid/route.ts](./frontend/src/app/api/verify-worldid/route.ts) — **World ID** server-side proof verification
+- [WorldIDAuth.tsx](./frontend/src/components/WorldIDAuth.tsx) — **World ID** IDKit widget, sybil-resistant verification (**World ID**)
+- [RiskChart.tsx](./frontend/src/components/RiskChart.tsx) — Risk score visualization (Area/Line/Bar/Candlestick charts)
+- [MarketCard.tsx](./frontend/src/components/MarketCard.tsx) — Prediction market card with multi-currency display
+- [Portfolio.tsx](./frontend/src/components/Portfolio.tsx) — Wallet portfolio view (**thirdweb, World ID**)
+- [ActivityFeed.tsx](./frontend/src/components/ActivityFeed.tsx) — Simulated CRE workflow activity feed (**Chainlink CRE**)
+- [contracts.ts](./frontend/src/lib/contracts.ts) — Smart contract ABIs + **Tenderly VTestNet** chain config (**thirdweb**)
+- [hooks.ts](./frontend/src/lib/hooks.ts) — Data hooks for **DeFi Llama** protocol data
+- [thirdweb.ts](./frontend/src/lib/thirdweb.ts) — **thirdweb** client initialization
+- [utils.ts](./frontend/src/lib/utils.ts) — Shared utility functions
+
 ## Deployments
 
 ### Tenderly Virtual TestNet

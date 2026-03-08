@@ -1,3 +1,13 @@
+/**
+ * Prediction Market Card
+ *
+ * Individual market card with YES/NO betting, pool visualization,
+ * countdown timer, and multi-currency display. Requires World ID
+ * verification to place bets. CRE MarketSettler resolves expired markets.
+ * Supports configurable decimal precision and display currency conversion.
+ *
+ * Sponsors: World ID (sybil gate), Chainlink CRE (settlement)
+ */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,14 +24,37 @@ type Market = {
   protocol: string;
 };
 
+// Approximate conversion rates from ETH (for display purposes)
+const ETH_RATES: Record<string, { rate: number; symbol: string }> = {
+  ETH: { rate: 1, symbol: "ETH" },
+  BTC: { rate: 0.055, symbol: "BTC" },
+  USD: { rate: 2150, symbol: "$" },
+  EUR: { rate: 1980, symbol: "\u20AC" },
+  GBP: { rate: 1700, symbol: "\u00A3" },
+  JPY: { rate: 322000, symbol: "\u00A5" },
+};
+
+function formatConverted(ethAmount: number, currency: string, precision: number): string {
+  const info = ETH_RATES[currency];
+  if (!info || currency === "ETH") return "";
+  const converted = ethAmount * info.rate;
+  if (currency === "BTC") return `${info.symbol} ${converted.toFixed(precision + 2)}`;
+  if (["USD", "EUR", "GBP"].includes(currency)) return `${info.symbol}${converted.toFixed(2)}`;
+  return `${info.symbol}${Math.round(converted).toLocaleString()}`;
+}
+
 export function MarketCard({
   market,
   isVerified,
   onBet,
+  decimalPrecision = 3,
+  displayCurrency = "ETH",
 }: {
   market: Market;
   isVerified: boolean;
   onBet?: (marketId: number, isYes: boolean, amount: number) => void;
+  decimalPrecision?: number;
+  displayCurrency?: string;
 }) {
   const [stakeAmount, setStakeAmount] = useState("0.01");
   const [localYes, setLocalYes] = useState(market.yesPool);
@@ -109,8 +142,18 @@ export function MarketCard({
           />
         </div>
         <div className="mt-1 flex justify-between text-[10px] text-[hsl(var(--muted))]">
-          <span>{localYes.toFixed(2)} ETH</span>
-          <span>{localNo.toFixed(2)} ETH</span>
+          <div>
+            <span>{localYes.toFixed(decimalPrecision)} <span className="text-[8px] font-medium text-sentinel-400">ETH</span></span>
+            {displayCurrency !== "ETH" && (
+              <span className="ml-1 text-[8px] opacity-60">{formatConverted(localYes, displayCurrency, decimalPrecision)}</span>
+            )}
+          </div>
+          <div>
+            <span>{localNo.toFixed(decimalPrecision)} <span className="text-[8px] font-medium text-sentinel-400">ETH</span></span>
+            {displayCurrency !== "ETH" && (
+              <span className="ml-1 text-[8px] opacity-60">{formatConverted(localNo, displayCurrency, decimalPrecision)}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -131,7 +174,10 @@ export function MarketCard({
         <div className={`mb-2 rounded-lg px-2.5 py-1.5 text-[10px] font-medium ${
           userBet === "yes" ? "bg-risk-low/10 text-risk-low" : "bg-risk-critical/10 text-risk-critical"
         }`}>
-          Your position: {userBet.toUpperCase()} ({stakeAmount} ETH)
+          Your position: {userBet.toUpperCase()} ({stakeAmount} <span className="font-semibold text-sentinel-400">ETH</span>)
+          {displayCurrency !== "ETH" && (
+            <span className="ml-1 opacity-60 text-[9px]">{formatConverted(parseFloat(stakeAmount) || 0, displayCurrency, decimalPrecision)}</span>
+          )}
         </div>
       )}
 
@@ -145,15 +191,18 @@ export function MarketCard({
             </div>
           )}
           <div className="flex gap-1.5">
-            <input
-              type="number"
-              step="0.01"
-              min="0.001"
-              value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
-              className="w-16 rounded-lg border border-[hsl(var(--card-border))] bg-transparent px-2 py-1.5 text-xs outline-none focus:border-sentinel-500"
-              placeholder="ETH"
-            />
+            <div className="flex items-center gap-1 rounded-lg border border-[hsl(var(--card-border))] bg-transparent px-2 py-1.5 focus-within:border-sentinel-500">
+              <input
+                type="number"
+                step="0.01"
+                min="0.001"
+                value={stakeAmount}
+                onChange={(e) => setStakeAmount(e.target.value)}
+                className="w-14 bg-transparent text-xs outline-none"
+                placeholder="0.01 ETH"
+              />
+              <span className="text-[9px] font-medium text-sentinel-400">ETH</span>
+            </div>
             <button
               onClick={() => handleBet(true)}
               disabled={!isVerified || betting}

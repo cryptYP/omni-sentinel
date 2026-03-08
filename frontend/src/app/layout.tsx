@@ -1,3 +1,9 @@
+/**
+ * Root Layout — OmniSentinel Frontend
+ *
+ * Wraps the entire app in ThirdwebProvider for wallet/chain context.
+ * Sponsors: thirdweb SDK (provider wrapper)
+ */
 import type { Metadata } from "next";
 import { ThirdwebProvider } from "thirdweb/react";
 import "./globals.css";

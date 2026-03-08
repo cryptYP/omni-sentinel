@@ -1,3 +1,12 @@
+/**
+ * Portfolio View
+ *
+ * Shows connected wallet address, World ID verification status,
+ * position/market/protocol stats, and monitored protocols with risk levels.
+ *
+ * Sponsors: thirdweb (useActiveAccount), World ID (status display),
+ * DeFi Llama (protocol data via hooks)
+ */
 "use client";
 
 import { useActiveAccount } from "thirdweb/react";
