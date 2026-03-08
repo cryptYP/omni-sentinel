@@ -86,14 +86,17 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
         onSuccess={handleSuccess}
       >
         {({ open }) => (
-          <button
-            onClick={open}
-            disabled={verifying}
-            className="flex items-center gap-1.5 rounded-lg border border-sentinel-600/30 bg-sentinel-600/10 px-3 py-2 text-xs font-medium text-sentinel-400 transition hover:bg-sentinel-600/20 disabled:opacity-50"
-          >
-            <Fingerprint className="h-3.5 w-3.5" />
-            {verifying ? "Verifying..." : "Verify with World ID"}
-          </button>
+          <div className="flex flex-col items-start gap-1">
+            <button
+              onClick={open}
+              disabled={verifying}
+              className="flex items-center gap-1.5 rounded-lg border border-sentinel-600/30 bg-sentinel-600/10 px-3 py-2 text-xs font-medium text-sentinel-400 transition hover:bg-sentinel-600/20 disabled:opacity-50"
+            >
+              <Fingerprint className="h-3.5 w-3.5" />
+              {verifying ? "Verifying..." : "Verify with World ID"}
+            </button>
+            <p className="text-[9px] text-[hsl(var(--muted))] pl-0.5">Scan the QR code with your phone camera, not the World App</p>
+          </div>
         )}
       </IDKitWidget>
 
