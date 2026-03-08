@@ -42,25 +42,32 @@ export type ProtocolDetail = {
   timestamp: number;
 };
 
-export function useDefiProtocols() {
+export function useDefiProtocols(updateIntervalSec = 120) {
   const [data, setData] = useState<ProtocolData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
 
   useEffect(() => {
-    fetch("/api/defi")
-      .then((r) => r.json())
-      .then((json) => {
-        setData(json.protocols ?? []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+    function doFetch() {
+      fetch("/api/defi")
+        .then((r) => r.json())
+        .then((json) => {
+          setData(json.protocols ?? []);
+          setLoading(false);
+          setLastUpdated(Date.now());
+        })
+        .catch((err) => {
+          setError(err.message);
+          setLoading(false);
+        });
+    }
+    doFetch();
+    const interval = setInterval(doFetch, updateIntervalSec * 1000);
+    return () => clearInterval(interval);
+  }, [updateIntervalSec]);
 
-  return { protocols: data, loading, error };
+  return { protocols: data, loading, error, lastUpdated };
 }
 
 export function useProtocolDetail(protocol: string) {

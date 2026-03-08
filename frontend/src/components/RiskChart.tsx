@@ -62,6 +62,7 @@ export function RiskChart({
   animation = true,
   gridLines = true,
   showTooltips = true,
+  numberFormat = "Compact",
 }: {
   activeProtocol: string;
   onProtocolChange: (id: string) => void;
@@ -70,8 +71,17 @@ export function RiskChart({
   animation?: boolean;
   gridLines?: boolean;
   showTooltips?: boolean;
+  numberFormat?: string;
 }) {
   const { data, loading } = useProtocolDetail(activeProtocol);
+
+  function fmtTvl(tvl: number): string {
+    if (numberFormat === "Full") return "$" + tvl.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (tvl >= 1e9) return `$${(tvl / 1e9).toFixed(2)}B`;
+    if (tvl >= 1e6) return `$${(tvl / 1e6).toFixed(2)}M`;
+    if (tvl >= 1e3) return `$${(tvl / 1e3).toFixed(1)}K`;
+    return `$${tvl.toFixed(0)}`;
+  }
 
   const protocolInfo = PROTOCOLS.find((p) => p.id === activeProtocol);
   const strokeColor = protocolInfo?.color ?? "#5c7cfa";
@@ -127,7 +137,7 @@ export function RiskChart({
         <div className="grid grid-cols-4 gap-2">
           <div className="rounded-lg bg-[hsl(var(--background))] p-2.5 text-center">
             <p className="text-[9px] text-[hsl(var(--muted))]">TVL</p>
-            <p className="text-sm font-bold">{data.tvlFormatted}</p>
+            <p className="text-sm font-bold">{fmtTvl(data.currentTvl)}</p>
           </div>
           <div className="rounded-lg bg-[hsl(var(--background))] p-2.5 text-center">
             <p className="text-[9px] text-[hsl(var(--muted))]">24h</p>

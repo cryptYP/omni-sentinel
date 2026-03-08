@@ -214,7 +214,19 @@ export default function Home() {
 
   const account = useActiveAccount();
 
-  const { protocols, loading: protocolsLoading } = useDefiProtocols();
+  const { protocols, loading: protocolsLoading, lastUpdated } = useDefiProtocols(parseInt(settingsUpdateInterval));
+
+  // Format TVL based on Number Format setting
+  function formatTvl(tvl: number): string {
+    if (settingsNumberFormat === "Full") {
+      return "$" + tvl.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    }
+    // Compact format (default)
+    if (tvl >= 1e9) return `$${(tvl / 1e9).toFixed(2)}B`;
+    if (tvl >= 1e6) return `$${(tvl / 1e6).toFixed(2)}M`;
+    if (tvl >= 1e3) return `$${(tvl / 1e3).toFixed(1)}K`;
+    return `$${tvl.toFixed(0)}`;
+  }
 
   const avgRisk = protocols.length > 0
     ? Math.round(protocols.reduce((s, p) => s + p.riskScore, 0) / protocols.length)
@@ -299,12 +311,25 @@ export default function Home() {
             <WorldIDAuth onVerified={() => setIsWorldIdVerified(true)} />
             <ConnectButton
               client={client}
+              chains={[tenderlyVTestNet]}
               chain={tenderlyVTestNet}
               connectButton={{
                 label: "Connect Wallet",
                 style: {
                   backgroundColor: "hsl(222, 47%, 7%)",
                   border: "1px solid hsl(222, 30%, 15%)",
+                  color: "white",
+                  borderRadius: "0.5rem",
+                  fontSize: "0.75rem",
+                  fontWeight: "500",
+                  padding: "0.5rem 0.875rem",
+                },
+              }}
+              switchButton={{
+                label: "Switch to Tenderly",
+                style: {
+                  backgroundColor: "hsl(270, 60%, 35%)",
+                  border: "1px solid hsl(270, 50%, 45%)",
                   color: "white",
                   borderRadius: "0.5rem",
                   fontSize: "0.75rem",
@@ -392,7 +417,7 @@ export default function Home() {
                       <div>
                         <p className="text-xs font-medium">{p.name}</p>
                         <p className="text-[9px] text-[hsl(var(--muted))]">
-                          {p.tvlFormatted} · Risk {p.riskScore}
+                          {formatTvl(p.tvl)} · Risk {p.riskScore}
                         </p>
                       </div>
                     </button>
@@ -416,7 +441,7 @@ export default function Home() {
                 </span>
               </div>
 
-              <RiskChart activeProtocol={activeProtocol} onProtocolChange={setActiveProtocol} chartStyle={settingsChartStyle} chartHeight={settingsChartHeight} animation={settingsAnimation} gridLines={settingsGridLines} showTooltips={settingsShowTooltips} />
+              <RiskChart activeProtocol={activeProtocol} onProtocolChange={setActiveProtocol} chartStyle={settingsChartStyle} chartHeight={settingsChartHeight} animation={settingsAnimation} gridLines={settingsGridLines} showTooltips={settingsShowTooltips} numberFormat={settingsNumberFormat} />
             </div>
 
             {/* ─── Circuit Breaker + Portfolio row ─── */}
@@ -743,7 +768,7 @@ export default function Home() {
                     }).map((p) => (
                       <Fragment key={p.slug}>
                         <div className="bg-[hsl(var(--card))] px-3 py-1.5 text-[10px] font-medium">{p.name}</div>
-                        <div key={`${p.slug}-tvl`} className="bg-[hsl(var(--card))] px-3 py-1.5 text-[10px] text-[hsl(var(--muted))]">{p.tvlFormatted}</div>
+                        <div key={`${p.slug}-tvl`} className="bg-[hsl(var(--card))] px-3 py-1.5 text-[10px] text-[hsl(var(--muted))]">{formatTvl(p.tvl)}</div>
                         <div key={`${p.slug}-score`} className={`bg-[hsl(var(--card))] px-3 py-1.5 text-[10px] font-bold ${p.riskScore > 50 ? "text-risk-high" : "text-risk-low"}`}>{p.riskScore}/100</div>
                         <div key={`${p.slug}-level`} className="bg-[hsl(var(--card))] px-3 py-1.5">
                           <span className={`rounded px-1.5 py-0.5 text-[8px] font-medium ${
@@ -1098,6 +1123,34 @@ export default function Home() {
 
             {/* Data */}
             <div className="card">
+              {/* Live preview */}
+              <div className="mb-4 rounded-lg border border-[hsl(var(--card-border))] bg-[hsl(var(--background))] p-3">
+                <p className="mb-1.5 text-[9px] font-medium text-[hsl(var(--muted))] uppercase tracking-wider">Live Preview</p>
+                <div className="flex items-center gap-4 text-[11px]">
+                  <span>
+                    <span className="text-[hsl(var(--muted))]">Amount:</span>{" "}
+                    <span className="font-mono font-medium">{(2.45).toFixed(parseInt(settingsDecimalPrecision))} ETH</span>
+                    {settingsDisplayCurrency !== "ETH" && (() => {
+                      const rates: Record<string, { rate: number; sym: string }> = { BTC: { rate: 0.055, sym: "BTC" }, USD: { rate: 2150, sym: "$" }, EUR: { rate: 1980, sym: "\u20AC" }, GBP: { rate: 1700, sym: "\u00A3" }, JPY: { rate: 322000, sym: "\u00A5" } };
+                      const r = rates[settingsDisplayCurrency];
+                      if (!r) return null;
+                      const v = 2.45 * r.rate;
+                      return <span className="ml-1 text-[9px] opacity-60">({["USD","EUR","GBP"].includes(settingsDisplayCurrency) ? `${r.sym}${v.toFixed(2)}` : settingsDisplayCurrency === "BTC" ? `${v.toFixed(5)} BTC` : `${r.sym}${Math.round(v).toLocaleString()}`})</span>;
+                    })()}
+                  </span>
+                  <span className="h-3 w-px bg-[hsl(var(--card-border))]" />
+                  <span>
+                    <span className="text-[hsl(var(--muted))]">TVL:</span>{" "}
+                    <span className="font-mono font-medium">{settingsNumberFormat === "Full" ? "$12,500,000,000" : "$12.50B"}</span>
+                  </span>
+                  <span className="h-3 w-px bg-[hsl(var(--card-border))]" />
+                  <span>
+                    <span className="text-[hsl(var(--muted))]">Refresh:</span>{" "}
+                    <span className="font-mono font-medium">{settingsUpdateInterval}s</span>
+                    {lastUpdated > 0 && <span className="ml-1 text-[9px] opacity-60">(last: {new Date(lastUpdated).toLocaleTimeString()})</span>}
+                  </span>
+                </div>
+              </div>
               <div className="mb-4 flex items-center gap-2">
                 <Gauge className="h-4 w-4 text-sentinel-400" />
                 <h3 className="text-sm font-semibold">Data</h3>
