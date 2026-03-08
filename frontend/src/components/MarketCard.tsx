@@ -11,6 +11,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import { prepareContractCall, toWei } from "thirdweb";
+import { getPredictionMarket } from "@/lib/contracts";
 import { Clock, Lock, Users, Zap } from "lucide-react";
 
 type Market = {
@@ -56,11 +59,14 @@ export function MarketCard({
   decimalPrecision?: number;
   displayCurrency?: string;
 }) {
+  const account = useActiveAccount();
+  const { mutate: sendTx, isPending: txPending } = useSendTransaction();
   const [stakeAmount, setStakeAmount] = useState("0.01");
   const [localYes, setLocalYes] = useState(market.yesPool);
   const [localNo, setLocalNo] = useState(market.noPool);
   const [userBet, setUserBet] = useState<"yes" | "no" | null>(null);
   const [betting, setBetting] = useState(false);
+  const [txStatus, setTxStatus] = useState<string | null>(null);
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -80,18 +86,70 @@ export function MarketCard({
     if (!isVerified) return;
     const amount = parseFloat(stakeAmount) || 0.01;
     setBetting(true);
+    setTxStatus(null);
 
-    // Simulate transaction delay
-    setTimeout(() => {
-      if (isYes) {
-        setLocalYes((prev) => prev + amount);
-      } else {
-        setLocalNo((prev) => prev + amount);
+    // Try real on-chain transaction first
+    if (account && market.id < 100) {
+      try {
+        const contract = getPredictionMarket();
+        const tx = prepareContractCall({
+          contract,
+          method: "takePosition",
+          params: [BigInt(market.id), isYes] as const,
+          value: toWei(stakeAmount),
+        });
+        sendTx(tx as any, {
+          onSuccess: () => {
+            if (isYes) setLocalYes((prev) => prev + amount);
+            else setLocalNo((prev) => prev + amount);
+            setUserBet(isYes ? "yes" : "no");
+            setBetting(false);
+            setTxStatus("confirmed");
+            onBet?.(market.id, isYes, amount);
+          },
+          onError: (err) => {
+            console.warn("On-chain tx failed, using demo mode:", err.message);
+            setTxStatus("demo");
+            // Fallback to demo mode
+            setTimeout(() => {
+              if (isYes) setLocalYes((prev) => prev + amount);
+              else setLocalNo((prev) => prev + amount);
+              setUserBet(isYes ? "yes" : "no");
+              setBetting(false);
+              onBet?.(market.id, isYes, amount);
+            }, 500);
+          },
+        });
+        return;
+      } catch {
+        // Fall through to demo mode
       }
+    }
+
+    // Demo mode fallback
+    setTxStatus("demo");
+    setTimeout(() => {
+      if (isYes) setLocalYes((prev) => prev + amount);
+      else setLocalNo((prev) => prev + amount);
       setUserBet(isYes ? "yes" : "no");
       setBetting(false);
       onBet?.(market.id, isYes, amount);
     }, 800);
+  }
+
+  function handleRequestSettlement() {
+    if (!account) return;
+    try {
+      const contract = getPredictionMarket();
+      const tx = prepareContractCall({
+        contract,
+        method: "requestSettlement",
+        params: [BigInt(market.id)] as const,
+      });
+      sendTx(tx as any);
+    } catch (err) {
+      console.warn("Settlement request failed:", err);
+    }
   }
 
   const categoryColors: Record<string, string> = {
@@ -221,10 +279,17 @@ export function MarketCard({
         </div>
       )}
 
+      {/* Transaction status */}
+      {txStatus && (
+        <div className={`mb-2 rounded-md px-2 py-1 text-[9px] font-medium ${txStatus === "confirmed" ? "bg-risk-low/10 text-risk-low" : "bg-sentinel-600/10 text-sentinel-400"}`}>
+          {txStatus === "confirmed" ? "On-chain tx confirmed" : "Demo mode (connect to Tenderly VTestNet for live tx)"}
+        </div>
+      )}
+
       {isExpired && !market.resolved && (
-        <button className="btn-outline w-full text-xs flex items-center justify-center gap-1.5">
+        <button onClick={handleRequestSettlement} disabled={txPending} className="btn-outline w-full text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
           <Zap className="h-3 w-3" />
-          Request CRE Settlement
+          {txPending ? "Requesting..." : "Request CRE Settlement"}
         </button>
       )}
     </div>

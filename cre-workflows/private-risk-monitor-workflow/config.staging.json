@@ -1,0 +1,11 @@
+{
+  "schedule": "*/10 * * * *",
+  "privateApiUrl": "https://api.example.com/v1/portfolio/risk-aggregate",
+  "evms": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia",
+      "riskOracleContractAddress": "0x245B19D0c4b42654fD7b7BaaCA16E2C74d88e97b"
+    }
+  ],
+  "gasLimit": 500000
+}

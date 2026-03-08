@@ -11,7 +11,7 @@
  */
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { client } from "@/lib/thirdweb";
 import { tenderlyVTestNet } from "@/lib/contracts";
@@ -77,6 +77,13 @@ export default function Home() {
   const [settingsNumberFormat, setSettingsNumberFormat] = useState("Compact");
   const [settingsShowTooltips, setSettingsShowTooltips] = useState(true);
   const [settingsDisplayCurrency, setSettingsDisplayCurrency] = useState("ETH");
+
+  // Easter egg state
+  const [logoClicks, setLogoClicks] = useState(0);
+  const [partyMode, setPartyMode] = useState(false);
+  const [matrixMode, setMatrixMode] = useState(false);
+  const [konamiProgress, setKonamiProgress] = useState(0);
+  const [easterEggsFound, setEasterEggsFound] = useState<Set<string>>(new Set());
 
   // Initialize demo markets on client only to avoid hydration mismatch
   useEffect(() => {
@@ -189,6 +196,42 @@ export default function Home() {
     root.style.setProperty("--risk-crit", settingsCritRisk);
   }, [mounted, settingsThemeMode, settingsAccentColor, settingsFontSize, settingsDensity, settingsBorderRadius, settingsChartHeight, settingsLowRisk, settingsMedRisk, settingsHighRisk, settingsCritRisk]);
 
+  // ─── EASTER EGGS ───
+  const KONAMI = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65]; // up up down down left right left right B A
+  const handleKonami = useCallback((e: KeyboardEvent) => {
+    setKonamiProgress((prev) => {
+      if (e.keyCode === KONAMI[prev]) {
+        const next = prev + 1;
+        if (next === KONAMI.length) {
+          setPartyMode(true);
+          setEasterEggsFound((s) => new Set(s).add("konami"));
+          setTimeout(() => setPartyMode(false), 5000);
+          return 0;
+        }
+        return next;
+      }
+      return 0;
+    });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKonami);
+    return () => window.removeEventListener("keydown", handleKonami);
+  }, [handleKonami]);
+
+  // Logo click easter egg: 7 clicks = matrix mode
+  function handleLogoClick() {
+    const next = logoClicks + 1;
+    setLogoClicks(next);
+    if (next >= 7) {
+      setMatrixMode((prev) => !prev);
+      setEasterEggsFound((s) => new Set(s).add("matrix"));
+      setLogoClicks(0);
+    }
+    // Reset after 2s of no clicks
+    setTimeout(() => setLogoClicks(0), 2000);
+  }
+
   function resetSettingsToDefaults() {
     setSettingsThemeMode("Dark");
     setSettingsAccentColor("Indigo");
@@ -254,13 +297,31 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className={`min-h-screen ${partyMode ? "animate-pulse" : ""}`} style={partyMode ? { filter: "hue-rotate(90deg)", transition: "filter 0.3s" } : matrixMode ? { background: "#000a00" } : undefined}>
+      {/* Easter egg overlays */}
+      {partyMode && (
+        <div className="pointer-events-none fixed inset-0 z-[999] flex items-center justify-center">
+          <div className="animate-bounce text-6xl">🎉</div>
+          <div className="absolute top-10 left-10 animate-spin text-4xl">🚀</div>
+          <div className="absolute bottom-10 right-10 animate-ping text-4xl">💎</div>
+          <div className="absolute top-1/3 right-1/4 animate-bounce text-3xl">🔥</div>
+        </div>
+      )}
+      {matrixMode && (
+        <div className="pointer-events-none fixed inset-0 z-[998] overflow-hidden opacity-20">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} className="absolute top-0 text-risk-low font-mono text-xs whitespace-nowrap animate-pulse" style={{ left: `${i * 5}%`, animationDelay: `${i * 0.2}s`, animationDuration: `${2 + Math.random() * 3}s` }}>
+              {Array.from({ length: 50 }).map(() => String.fromCharCode(0x30A0 + Math.random() * 96)).join("")}
+            </div>
+          ))}
+        </div>
+      )}
       {/* ─── HEADER ─── */}
       <header className="sticky top-0 z-50 border-b border-[hsl(var(--card-border))] bg-[hsl(var(--background))]/80 px-6 py-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sentinel-600/20">
-              <Shield className="h-5 w-5 text-sentinel-400" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sentinel-600/20 cursor-pointer select-none" onClick={handleLogoClick}>
+              <Shield className={`h-5 w-5 text-sentinel-400 transition-transform ${logoClicks > 0 ? "scale-110" : ""}`} />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">OmniSentinel</h1>
@@ -281,7 +342,7 @@ export default function Home() {
               }`}
             >
               <Shield className="h-3 w-3" />
-              Consumer
+              Markets
             </button>
             <button
               onClick={() => setPageView("dev")}
@@ -292,7 +353,7 @@ export default function Home() {
               }`}
             >
               <Zap className="h-3 w-3" />
-              Developer
+              Dev
             </button>
             <button
               onClick={() => setPageView("settings")}
@@ -1248,6 +1309,39 @@ export default function Home() {
                 <RotateCcw className="h-3.5 w-3.5" />
                 Reset to Defaults
               </button>
+            </div>
+
+            {/* Easter Egg Guide */}
+            <div className="card mt-6 border-dashed border-sentinel-600/20">
+              <h3 className="mb-3 text-xs font-semibold text-[hsl(var(--muted))]">Hidden Features</h3>
+              <div className="space-y-2 text-[10px]">
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${easterEggsFound.has("konami") ? "bg-risk-low/20 text-risk-low" : "bg-[hsl(var(--background))] text-[hsl(var(--muted))]"}`}>
+                    {easterEggsFound.has("konami") ? "!" : "?"}
+                  </span>
+                  <div>
+                    <p className="font-medium">Konami Code</p>
+                    <p className="text-[hsl(var(--muted))]">{easterEggsFound.has("konami") ? "Found! Party mode activated" : "A classic cheat code... try it on your keyboard"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${easterEggsFound.has("matrix") ? "bg-risk-low/20 text-risk-low" : "bg-[hsl(var(--background))] text-[hsl(var(--muted))]"}`}>
+                    {easterEggsFound.has("matrix") ? "!" : "?"}
+                  </span>
+                  <div>
+                    <p className="font-medium">The Matrix</p>
+                    <p className="text-[hsl(var(--muted))]">{easterEggsFound.has("matrix") ? "Found! Click the logo again to toggle" : "Some things reveal themselves when you click enough..."}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] bg-[hsl(var(--background))] text-[hsl(var(--muted))]">?</span>
+                  <div>
+                    <p className="font-medium">???</p>
+                    <p className="text-[hsl(var(--muted))]">More secrets to discover...</p>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-[9px] text-[hsl(var(--muted))]">{easterEggsFound.size}/3 discovered</p>
             </div>
           </div>
         )}

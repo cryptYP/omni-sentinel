@@ -10,6 +10,7 @@ An AI-driven CRE workflow platform that monitors DeFi protocol health across cha
 | CRE & AI | $17,000 | Gemini AI integration in RiskMonitor and MarketSettler CRE workflows |
 | Prediction Markets | $16,000 | AI-settled prediction markets on DeFi safety events |
 | Risk & Compliance | $16,000 | Automated circuit breaker triggered by risk threshold monitoring |
+| Privacy | $16,000 | Confidential HTTP workflow for private risk data aggregation |
 | Best use of World ID with CRE | $5,000 | Sybil-resistant prediction market participation via World ID |
 | Tenderly Virtual TestNets | $5,000 | All contracts deployed and tested on Tenderly VTestNet |
 | thirdweb x CRE | Plan prizes | thirdweb SDK for wallet connection and contract interaction |
@@ -59,6 +60,8 @@ All CRE workflow files and smart contracts that use Chainlink:
 - [Market Settler Config](./cre-workflows/market-settler-workflow/config.staging.json)
 - [Safeguard Trigger Workflow](./cre-workflows/safeguard-trigger-workflow/main.ts) — Automated circuit breaker
 - [Safeguard Trigger Config](./cre-workflows/safeguard-trigger-workflow/config.staging.json)
+- [Private Risk Monitor Workflow](./cre-workflows/private-risk-monitor-workflow/main.ts) — **Privacy track**: Confidential HTTP risk data aggregation
+- [Private Risk Monitor Config](./cre-workflows/private-risk-monitor-workflow/config.staging.json)
 
 ### Smart Contracts (CRE Consumer Contracts implementing IReceiver)
 - [IReceiver Interface](./contracts/src/interfaces/IReceiver.sol) — CRE consumer interface
