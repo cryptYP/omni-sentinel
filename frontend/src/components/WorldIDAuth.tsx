@@ -95,7 +95,7 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
               <Fingerprint className="h-3.5 w-3.5" />
               {verifying ? "Verifying..." : "Verify with World ID"}
             </button>
-            <p className="text-[9px] text-[hsl(var(--muted))] pl-0.5">Scan the QR code with your phone camera, not the World App</p>
+            <p className="text-[9px] text-[hsl(var(--muted))] pl-0.5">Scan the QR code with your phone camera</p>
           </div>
         )}
       </IDKitWidget>
