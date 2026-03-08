@@ -25,26 +25,29 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
   const [verifying, setVerifying] = useState(false);
 
   async function handleVerify(result: ISuccessResult) {
+    // IDKit blocks onSuccess until handleVerify resolves.
+    // The World App bridge has already validated the proof client-side,
+    // so we return immediately and do backend verification in the background.
+    // This prevents the QR code flow from appearing stuck/frozen.
     setVerifying(true);
-    try {
-      const response = await fetch("/api/verify-worldid", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...result,
-          action: "verify-human",
-        }),
-      });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        console.warn("Backend verification failed:", data);
-        // Don't throw — allow the flow to continue to onSuccess
-        // The proof was validated by the World App already
-      }
-    } catch (error) {
-      console.warn("Backend verification error:", error);
-    }
+    // Fire-and-forget backend verification (non-blocking)
+    fetch("/api/verify-worldid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...result, action: "verify-human" }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          console.warn("Backend verification:", data);
+        } else {
+          console.log("Backend verification confirmed");
+        }
+      })
+      .catch((err) => console.warn("Backend verify error:", err));
+
+    // Return immediately so IDKit proceeds to onSuccess without waiting
   }
 
   function handleSuccess(result: ISuccessResult) {
