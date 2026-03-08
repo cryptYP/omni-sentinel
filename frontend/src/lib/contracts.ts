@@ -15,6 +15,7 @@ export const tenderlyVTestNet = defineChain({
   id: 73571,
   name: "Tenderly Virtual TestNet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpc: "https://virtual.sepolia.eu.rpc.tenderly.co/a3230981-0711-4cf8-a0cc-4fec31158ab8",
   testnet: true,
 });
 

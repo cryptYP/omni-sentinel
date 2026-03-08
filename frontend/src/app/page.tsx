@@ -299,6 +299,26 @@ export default function Home() {
 
   const account = useActiveAccount();
 
+  // Auto-fund wallet with 10 ETH when connected (Tenderly faucet)
+  useEffect(() => {
+    if (!account?.address) return;
+    const funded = sessionStorage.getItem(`funded_${account.address}`);
+    if (funded) return;
+    fetch("/api/tenderly/faucet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: account.address }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          console.log(`Funded ${account.address} with 10 ETH on Tenderly VTestNet`);
+          sessionStorage.setItem(`funded_${account.address}`, "true");
+        }
+      })
+      .catch(() => {});
+  }, [account?.address]);
+
   const { protocols, loading: protocolsLoading, lastUpdated } = useDefiProtocols(parseInt(settingsUpdateInterval));
 
   // Format TVL based on Number Format setting
