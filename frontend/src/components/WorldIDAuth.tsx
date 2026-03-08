@@ -2,8 +2,9 @@
  * World ID Authentication Component
  *
  * Provides sybil-resistant identity verification using World ID (IDKit widget).
- * Verifies proofs server-side via /api/verify-worldid, gates prediction market
- * participation. Includes download links for World App (iOS/Android/web).
+ * Uses onSuccess-only pattern (no handleVerify) for instant verification after
+ * World App bridge confirms the proof. Backend verification runs in background.
+ * Includes download links for World App (iOS/Android/web).
  *
  * Sponsors: World ID (@worldcoin/idkit, VerificationLevel.Device),
  * thirdweb (useActiveAccount for wallet check)
@@ -24,37 +25,36 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
   const [verified, setVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
-  async function handleVerify(result: ISuccessResult) {
-    // IDKit blocks onSuccess until handleVerify resolves.
-    // The World App bridge has already validated the proof client-side,
-    // so we return immediately and do backend verification in the background.
-    // This prevents the QR code flow from appearing stuck/frozen.
+  async function handleSuccess(result: ISuccessResult) {
+    // onSuccess fires immediately after World App bridge confirms the proof.
+    // No blocking handleVerify — this is the pattern that was working before.
     setVerifying(true);
 
-    // Fire-and-forget backend verification (non-blocking)
-    fetch("/api/verify-worldid", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...result, action: "verify-human" }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          console.warn("Backend verification:", data);
-        } else {
-          console.log("Backend verification confirmed");
-        }
-      })
-      .catch((err) => console.warn("Backend verify error:", err));
-
-    // Return immediately so IDKit proceeds to onSuccess without waiting
-  }
-
-  function handleSuccess(result: ISuccessResult) {
-    console.log("World ID verified:", result);
+    // Immediately mark as verified (proof already validated by World App)
     setVerified(true);
     setVerifying(false);
     onVerified?.();
+
+    // Fire-and-forget backend verification in background
+    try {
+      const response = await fetch("/api/verify-worldid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proof: result,
+          address: account?.address,
+        }),
+      });
+
+      if (response.ok) {
+        console.log("Backend verification confirmed");
+      } else {
+        console.warn("Backend verification failed (proof still valid via bridge)");
+      }
+    } catch (error) {
+      // Backend verify failed but proof is already validated by World App
+      console.warn("Backend verify error:", error);
+    }
   }
 
   if (verified) {
@@ -78,10 +78,11 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
   return (
     <div className="group relative">
       <IDKitWidget
-        app_id="app_2062faf3bc4e6c471c6f983715d15119"
-        action="verify-human"
+        app_id={
+          (process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`) ?? "app_omni_sentinel"
+        }
+        action={process.env.NEXT_PUBLIC_WORLD_ACTION ?? "verify-human"}
         verification_level={VerificationLevel.Device}
-        handleVerify={handleVerify}
         onSuccess={handleSuccess}
       >
         {({ open }) => (
