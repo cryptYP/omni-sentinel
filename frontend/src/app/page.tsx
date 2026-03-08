@@ -16,6 +16,7 @@ import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { client } from "@/lib/thirdweb";
 import { tenderlyVTestNet } from "@/lib/contracts";
 import { useDefiProtocols, getDemoMarkets } from "@/lib/hooks";
+import { rotateVTestNet, checkVTestNetHealth, getVNetHistory, isBlockLimitError, type VNetRecord } from "@/lib/tenderly-rotation";
 import { WorldIDAuth } from "@/components/WorldIDAuth";
 import { RiskChart } from "@/components/RiskChart";
 import { MarketCard } from "@/components/MarketCard";
@@ -85,6 +86,12 @@ export default function Home() {
   const [konamiProgress, setKonamiProgress] = useState(0);
   const [easterEggsFound, setEasterEggsFound] = useState<Set<string>>(new Set());
 
+  // VTestNet rotation state
+  const [vnetStatus, setVnetStatus] = useState<"ok" | "rotating" | "rotated" | "error">("ok");
+  const [vnetInfo, setVnetInfo] = useState<VNetRecord | null>(null);
+  const [vnetBlockNumber, setVnetBlockNumber] = useState<number | null>(null);
+  const [vnetHistory, setVnetHistory] = useState<VNetRecord[]>([]);
+
   // Initialize demo markets on client only to avoid hydration mismatch
   useEffect(() => {
     setMarkets(getDemoMarkets());
@@ -114,7 +121,42 @@ export default function Home() {
         if (s.displayCurrency) setSettingsDisplayCurrency(s.displayCurrency);
       }
     } catch {}
+    // Load VTestNet history
+    setVnetHistory(getVNetHistory());
   }, []);
+
+  // Periodically check VTestNet health (every 60s)
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const health = await checkVTestNetHealth();
+        if (cancelled) return;
+        if (health.blockNumber) setVnetBlockNumber(health.blockNumber);
+        if (health.needsRotation && vnetStatus === "ok") {
+          handleVNetRotation();
+        }
+      } catch {}
+    };
+    check();
+    const interval = setInterval(check, 60_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [mounted, vnetStatus]);
+
+  // Handle VTestNet rotation
+  const handleVNetRotation = useCallback(async () => {
+    setVnetStatus("rotating");
+    const vnet = await rotateVTestNet("block_limit_reached");
+    if (vnet) {
+      setVnetInfo(vnet);
+      setVnetStatus("rotated");
+      setVnetHistory(getVNetHistory());
+    } else {
+      setVnetStatus("error");
+    }
+  }, []);
+
   // Persist settings to localStorage
   useEffect(() => {
     if (!mounted) return;
@@ -316,8 +358,33 @@ export default function Home() {
           ))}
         </div>
       )}
+      {/* VTestNet rotation banner */}
+      {vnetStatus === "rotating" && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-[#7C3AED] text-white text-center py-2 text-xs font-medium animate-pulse">
+          <RotateCcw className="inline h-3 w-3 mr-1.5 animate-spin" />
+          Rotating to a new Tenderly VTestNet — block limit reached on current instance...
+        </div>
+      )}
+      {vnetStatus === "rotated" && vnetInfo && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-risk-low/90 text-white text-center py-2 text-xs font-medium flex items-center justify-center gap-2">
+          <ShieldCheck className="h-3 w-3" />
+          Rotated to new VTestNet: {vnetInfo.displayName}
+          {vnetInfo.explorerUrl && (
+            <a href={vnetInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="underline ml-1">Explorer</a>
+          )}
+          <button onClick={() => setVnetStatus("ok")} className="ml-3 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Dismiss</button>
+        </div>
+      )}
+      {vnetStatus === "error" && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-risk-critical/90 text-white text-center py-2 text-xs font-medium flex items-center justify-center gap-2">
+          <ShieldAlert className="h-3 w-3" />
+          VTestNet rotation failed — check TENDERLY_ACCESS_KEY in environment
+          <button onClick={() => setVnetStatus("ok")} className="ml-3 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Dismiss</button>
+          <button onClick={handleVNetRotation} className="ml-1 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Retry</button>
+        </div>
+      )}
       {/* ─── HEADER ─── */}
-      <header className="sticky top-0 z-50 border-b border-[hsl(var(--card-border))] bg-[hsl(var(--background))]/80 px-6 py-3 backdrop-blur-xl">
+      <header className={`sticky top-0 z-50 border-b border-[hsl(var(--card-border))] bg-[hsl(var(--background))]/80 px-6 py-3 backdrop-blur-xl ${vnetStatus === "rotating" || vnetStatus === "rotated" || vnetStatus === "error" ? "mt-8" : ""}`}>
         <div className="mx-auto flex max-w-[1400px] items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sentinel-600/20 cursor-pointer select-none" onClick={handleLogoClick}>
@@ -859,7 +926,13 @@ export default function Home() {
                 <ServiceRow name="Chainlink CRE" status="running" detail="3 workflows active" badge="Orchestration" badgeColor="text-[#375BD2] bg-[#375BD2]/10" />
                 <ServiceRow name="thirdweb SDK" status="connected" detail="Wallet + contract calls" badge="Web3" badgeColor="text-[#A855F7] bg-[#A855F7]/10" />
                 <ServiceRow name="World ID" status="ready" detail="Sybil-resistant gating" badge="Identity" badgeColor="text-[#00C3B6] bg-[#00C3B6]/10" />
-                <ServiceRow name="Tenderly VTestNet" status="connected" detail="Chain ID 73571" badge="Testnet" badgeColor="text-[#7C3AED] bg-[#7C3AED]/10" />
+                <ServiceRow
+                  name="Tenderly VTestNet"
+                  status={vnetStatus === "rotating" ? "running" : vnetStatus === "error" ? "ready" : "connected"}
+                  detail={vnetBlockNumber ? `Block #${vnetBlockNumber.toLocaleString()} · Chain 73571` : "Chain ID 73571"}
+                  badge={vnetStatus === "rotated" ? "Rotated" : "Testnet"}
+                  badgeColor="text-[#7C3AED] bg-[#7C3AED]/10"
+                />
                 <ServiceRow name="Gemini AI" status="ready" detail="Risk analysis engine" badge="AI" badgeColor="text-[#4285F4] bg-[#4285F4]/10" />
               </div>
             </div>
@@ -874,6 +947,59 @@ export default function Home() {
                 </span>
               </h2>
               <ActivityFeed />
+            </div>
+
+            {/* ─── VTestNet Management ─── */}
+            <div className="mb-6 card">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <RotateCcw className="h-4 w-4 text-[#7C3AED]" />
+                VTestNet Auto-Rotation
+                {vnetBlockNumber && (
+                  <span className="rounded-full bg-[#7C3AED]/10 px-2 py-0.5 text-[9px] text-[#7C3AED] font-medium">Block #{vnetBlockNumber.toLocaleString()}</span>
+                )}
+              </h2>
+              <p className="mb-3 text-[11px] text-[hsl(var(--muted))]">
+                When the current VTestNet hits its block height limit, OmniSentinel automatically creates a fresh fork via the Tenderly REST API. Historical data stays accessible on retired instances.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  onClick={handleVNetRotation}
+                  disabled={vnetStatus === "rotating"}
+                  className="rounded-lg bg-[#7C3AED]/15 px-3 py-1.5 text-[11px] font-medium text-[#7C3AED] transition hover:bg-[#7C3AED]/25 disabled:opacity-40"
+                >
+                  {vnetStatus === "rotating" ? "Rotating..." : "Manual Rotate"}
+                </button>
+                <button
+                  onClick={async () => {
+                    const h = await checkVTestNetHealth();
+                    if (h.blockNumber) setVnetBlockNumber(h.blockNumber);
+                  }}
+                  className="rounded-lg bg-[hsl(var(--card-border))]/50 px-3 py-1.5 text-[11px] font-medium text-[hsl(var(--foreground))]/70 transition hover:bg-[hsl(var(--card-border))]"
+                >
+                  Check Health
+                </button>
+              </div>
+              {vnetHistory.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[9px] font-semibold text-[hsl(var(--muted))] uppercase tracking-wider">Instance History</p>
+                  {vnetHistory.slice(0, 5).map((v, i) => (
+                    <div key={v.id ?? i} className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] ${i === 0 && !v.retired ? "bg-[#7C3AED]/10 border border-[#7C3AED]/20" : "bg-[hsl(var(--background))]"}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`h-1.5 w-1.5 rounded-full ${i === 0 && !v.retired ? "bg-[#7C3AED]" : "bg-[hsl(var(--muted))]/40"}`} />
+                        <span className="font-medium">{v.displayName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[hsl(var(--muted))]">{new Date(v.createdAt).toLocaleString()}</span>
+                        {v.explorerUrl && (
+                          <a href={v.explorerUrl} target="_blank" rel="noopener noreferrer" className="text-[#7C3AED] hover:underline">
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ─── HOW IT WORKS — SPONSOR INTEGRATION MAP ─── */}
