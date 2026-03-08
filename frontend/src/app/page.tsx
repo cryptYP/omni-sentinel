@@ -969,15 +969,46 @@ export default function Home() {
               <ActivityFeed />
             </div>
 
-            {/* ─── VTestNet Management ─── */}
+            {/* ─── VTestNet Faucet & Management ─── */}
             <div className="mb-6 card">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <RotateCcw className="h-4 w-4 text-[#7C3AED]" />
-                VTestNet Auto-Rotation
+                <Wallet className="h-4 w-4 text-[#7C3AED]" />
+                VTestNet Faucet & Management
                 {vnetBlockNumber && (
                   <span className="rounded-full bg-[#7C3AED]/10 px-2 py-0.5 text-[9px] text-[#7C3AED] font-medium">Block #{vnetBlockNumber.toLocaleString()}</span>
                 )}
               </h2>
+
+              {/* ─── Faucet ─── */}
+              <div className="mb-4 rounded-lg border border-[#7C3AED]/20 bg-[#7C3AED]/5 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-3.5 w-3.5 text-[#7C3AED]" />
+                  <span className="text-[11px] font-semibold text-[#7C3AED]">Tenderly VTestNet Faucet</span>
+                </div>
+                <p className="mb-2.5 text-[10px] text-[hsl(var(--muted))]">
+                  Get free ETH on the Tenderly Virtual TestNet to use prediction markets and interact with contracts. This is testnet ETH — no real value.
+                </p>
+                {account ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 rounded-md bg-[hsl(var(--background))] px-2.5 py-1.5 text-[10px]">
+                      <span className="text-[hsl(var(--muted))]">Connected:</span>
+                      <code className="font-mono text-[hsl(var(--foreground))]">{account.address.slice(0, 6)}...{account.address.slice(-4)}</code>
+                    </div>
+                    <div className="flex gap-2">
+                      <FaucetButton address={account.address} amount="10" />
+                      <FaucetButton address={account.address} amount="100" />
+                      <FaucetButton address={account.address} amount="1000" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md bg-[hsl(var(--background))] px-2.5 py-2 text-[10px] text-[hsl(var(--muted))]">
+                    <Wallet className="h-3 w-3" />
+                    Connect your wallet above to use the faucet
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Auto-Rotation ─── */}
               <p className="mb-3 text-[11px] text-[hsl(var(--muted))]">
                 When the current VTestNet hits its block height limit, OmniSentinel automatically creates a fresh fork via the Tenderly REST API. Historical data stays accessible on retired instances.
               </p>
@@ -1555,6 +1586,42 @@ function ServiceRow({
       </div>
       <span className="text-[9px] text-risk-low capitalize">{status}</span>
     </div>
+  );
+}
+
+function FaucetButton({ address, amount }: { address: string; amount: string }) {
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const ethHex = amount === "10" ? "0x8AC7230489E80000" : amount === "100" ? "0x56BC75E2D63100000" : "0x3635C9ADC5DEA00000";
+
+  async function handleFaucet() {
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/tenderly/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, ethHex }),
+      });
+      const data = await res.json();
+      setStatus(data.success ? "done" : "error");
+      setTimeout(() => setStatus("idle"), 3000);
+    } catch {
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleFaucet}
+      disabled={status === "loading"}
+      className={`rounded-lg px-3 py-1.5 text-[11px] font-medium transition ${
+        status === "done" ? "bg-risk-low/15 text-risk-low" :
+        status === "error" ? "bg-risk-critical/15 text-risk-critical" :
+        "bg-[#7C3AED]/15 text-[#7C3AED] hover:bg-[#7C3AED]/25"
+      } disabled:opacity-40`}
+    >
+      {status === "loading" ? "..." : status === "done" ? `+${amount} ETH` : status === "error" ? "Failed" : `Get ${amount} ETH`}
+    </button>
   );
 }
 

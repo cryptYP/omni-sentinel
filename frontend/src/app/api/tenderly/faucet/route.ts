@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { address } = await req.json();
+    const { address, ethHex } = await req.json();
 
     if (!address || typeof address !== "string" || !address.startsWith("0x")) {
       return NextResponse.json({ error: "Invalid address" }, { status: 400 });
@@ -23,13 +23,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "RPC not configured" }, { status: 500 });
     }
 
+    // Allowed amounts: 10 ETH, 100 ETH, 1000 ETH
+    const allowedAmounts: Record<string, string> = {
+      "0x8AC7230489E80000": "10 ETH",
+      "0x56BC75E2D63100000": "100 ETH",
+      "0x3635C9ADC5DEA00000": "1000 ETH",
+    };
+    const amountHex = ethHex && allowedAmounts[ethHex] ? ethHex : "0x8AC7230489E80000";
+    const amountLabel = allowedAmounts[amountHex];
+
+    // Use tenderly_addBalance to ADD to existing balance (not replace)
     const res = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        method: "tenderly_setBalance",
-        params: [[address], "0x8AC7230489E80000"], // 10 ETH
+        method: "tenderly_addBalance",
+        params: [[address], amountHex],
         id: 1,
       }),
     });
@@ -43,7 +53,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       address,
-      amount: "10 ETH",
+      amount: amountLabel,
       txHash: data.result,
     });
   } catch (error: any) {
