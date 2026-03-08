@@ -54,8 +54,7 @@ export async function POST(req: Request) {
             },
           },
           sync_state_config: {
-            enabled: true,
-            commitment_level: "latest",
+            enabled: false,
           },
           explorer_page_config: {
             enabled: true,

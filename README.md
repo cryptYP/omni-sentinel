@@ -98,11 +98,20 @@ All CRE workflow files and smart contracts that use Chainlink:
 ## Deployments
 
 ### Tenderly Virtual TestNet
-- **Explorer Link:** https://dashboard.tenderly.co/explorer/vnet/69edc2ec-13a2-491f-aa7e-88c38dab91fe/transactions
+- **VTestNet v2 (active):** Created via Tenderly REST API with auto-rotation support
+- **VTestNet v1 (retired):** [Explorer Link](https://dashboard.tenderly.co/explorer/vnet/69edc2ec-13a2-491f-aa7e-88c38dab91fe/transactions) — 80+ historical transactions
 - **Chain ID:** 73571 (forked from Sepolia)
-- **On-chain Activity:** 80+ transactions including contract deployments, risk score updates across 3 protocols (Aave, Compound, Lido), prediction market creation with multi-user ETH staking, and safeguard circuit breaker cycles (PAUSE/LIMITED/EMERGENCY/RESET)
+- **Auto-Rotation:** When block height limit is reached, a new VTestNet is created via `/api/tenderly/rotate`, contracts are redeployed, and the frontend seamlessly switches over. Old instances remain accessible for historical data.
 
-### Contract Addresses
+### Contract Addresses (VTestNet v2)
+| Contract | Address |
+|----------|---------|
+| RiskOracle | `0xDC0Ef4127d33632e76aba237666D8e7927AD5B67` |
+| PredictionMarket | `0x580CC465c401B8873b4a119d8bf19c9416223979` |
+| SafeguardController | `0x8E381ba0A0E5441C73485f9F046A428c3612aD42` |
+| WorldIDVerifier | `0x4f17F1CEc2793ca2e9584D5e956071999eECD790` |
+
+### Contract Addresses (VTestNet v1 — retired)
 | Contract | Address |
 |----------|---------|
 | RiskOracle | `0x245B19D0c4b42654fD7b7BaaCA16E2C74d88e97b` |

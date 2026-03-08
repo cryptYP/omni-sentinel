@@ -5,9 +5,9 @@
 staging-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
-      url: https://virtual.sepolia.eu.rpc.tenderly.co/bb5b6971-86f6-4f83-8017-7ddd7d27ced7
+      url: https://virtual.sepolia.eu.rpc.tenderly.co/757f8dff-67a1-4f35-94a4-ab07e1d43670
 
 production-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
-      url: https://virtual.sepolia.eu.rpc.tenderly.co/bb5b6971-86f6-4f83-8017-7ddd7d27ced7
+      url: https://virtual.sepolia.eu.rpc.tenderly.co/757f8dff-67a1-4f35-94a4-ab07e1d43670
