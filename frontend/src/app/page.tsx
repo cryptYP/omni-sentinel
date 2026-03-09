@@ -7,12 +7,22 @@
  *
  * Sponsors: thirdweb (ConnectButton, wallet), World ID (verification gate),
  * Chainlink CRE (pipeline visualization), Tenderly VTestNet (chain config),
- * Gemini AI (risk analysis reference), DeFi Llama (live protocol data)
+ * Gemini AI (risk analysis via /api/risk-insights), DeFi Llama (live protocol data)
+ *
+ * Prize tracks:
+ * - CRE & AI ($17k): Gemini AI risk scoring in CRE RiskMonitor workflow
+ * - DeFi & Tokenization ($20k): AI-powered Proof-of-Reserve-style data feed
+ * - Prediction Markets ($16k): AI-settled prediction markets on DeFi safety
+ * - Risk & Compliance ($16k): Automated circuit breaker via SafeguardController
+ * - Privacy ($16k): Confidential HTTP workflow for private risk aggregation
+ * - World ID + CRE ($5k): Sybil-resistant market participation
+ * - Tenderly VTestNets ($5k): All contracts deployed + auto-rotation
+ * - thirdweb x CRE: Wallet connection + contract interaction via thirdweb SDK
  */
 "use client";
 
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { ConnectButton, useActiveAccount } from "thirdweb/react";
+import { ConnectButton, useActiveAccount, useWalletBalance, useSwitchActiveWalletChain, useActiveWalletChain } from "thirdweb/react";
 import { client } from "@/lib/thirdweb";
 import { tenderlyVTestNet } from "@/lib/contracts";
 import { useDefiProtocols, getDemoMarkets } from "@/lib/hooks";
@@ -20,6 +30,7 @@ import { rotateVTestNet, checkVTestNetHealth, getVNetHistory, isBlockLimitError,
 import { WorldIDAuth } from "@/components/WorldIDAuth";
 import { RiskChart } from "@/components/RiskChart";
 import { MarketCard } from "@/components/MarketCard";
+import { Inbox, pushInboxEvent } from "@/components/Inbox";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { Portfolio } from "@/components/Portfolio";
 import {
@@ -45,6 +56,10 @@ import {
   Gauge,
   Eye,
   RotateCcw,
+  AlertTriangle,
+  Info,
+  Sparkles,
+  Clock,
 } from "lucide-react";
 
 export default function Home() {
@@ -86,8 +101,30 @@ export default function Home() {
   const [konamiProgress, setKonamiProgress] = useState(0);
   const [easterEggsFound, setEasterEggsFound] = useState<Set<string>>(new Set());
 
+  // Transaction mode: wallet signing vs Admin RPC
+  const [txMode, setTxMode] = useState<"wallet" | "admin">("wallet");
+
+  // Risk insights from Gemini AI / CRE pipeline
+  const [riskInsights, setRiskInsights] = useState<Array<{
+    id: string;
+    severity: "info" | "warning" | "critical";
+    title: string;
+    detail: string;
+    protocol?: string;
+    timestamp: number;
+  }>>([]);
+  const [insightsSource, setInsightsSource] = useState<"gemini" | "analysis">("analysis");
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsFetchedAt, setInsightsFetchedAt] = useState<number>(0);
+  const [insightsCountdown, setInsightsCountdown] = useState<string>("");
+
+  // Live balance tracking — increment to force refetch after faucet/bet
+  const [balanceRefreshKey, setBalanceRefreshKey] = useState(0);
+  const refreshBalance = useCallback(() => setBalanceRefreshKey((k) => k + 1), []);
+
   // VTestNet rotation state
   const [vnetStatus, setVnetStatus] = useState<"ok" | "rotating" | "rotated" | "error">("ok");
+  const [vnetError, setVnetError] = useState<string | null>(null);
   const [vnetInfo, setVnetInfo] = useState<VNetRecord | null>(null);
   const [vnetBlockNumber, setVnetBlockNumber] = useState<number | null>(null);
   const [vnetHistory, setVnetHistory] = useState<VNetRecord[]>([]);
@@ -134,8 +171,9 @@ export default function Home() {
         const health = await checkVTestNetHealth();
         if (cancelled) return;
         if (health.blockNumber) setVnetBlockNumber(health.blockNumber);
-        if (health.needsRotation && vnetStatus === "ok") {
-          handleVNetRotation();
+        if (health.needsRotation && vnetStatus === "ok" && !health.healthy) {
+          // Only log — manual rotation via Dev tab. Auto-rotate caused confusing errors with expired keys.
+          console.warn("[OmniSentinel] VTestNet health check failed — rotation may be needed");
         }
       } catch {}
     };
@@ -147,12 +185,14 @@ export default function Home() {
   // Handle VTestNet rotation
   const handleVNetRotation = useCallback(async () => {
     setVnetStatus("rotating");
-    const vnet = await rotateVTestNet("block_limit_reached");
-    if (vnet) {
-      setVnetInfo(vnet);
+    setVnetError(null);
+    const result = await rotateVTestNet("block_limit_reached");
+    if (result.vnet) {
+      setVnetInfo(result.vnet);
       setVnetStatus("rotated");
       setVnetHistory(getVNetHistory());
     } else {
+      setVnetError(result.error ?? "Unknown error");
       setVnetStatus("error");
     }
   }, []);
@@ -298,6 +338,79 @@ export default function Home() {
   }
 
   const account = useActiveAccount();
+  const switchChain = useSwitchActiveWalletChain();
+  const activeChain = useActiveWalletChain();
+
+  // Auto-switch wallet to Tenderly VTestNet on connect
+  useEffect(() => {
+    if (account && activeChain && activeChain.id !== tenderlyVTestNet.id) {
+      switchChain(tenderlyVTestNet).catch((err) => {
+        // If thirdweb switch fails, try adding chain via raw MetaMask RPC
+        const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+        (window as any).ethereum?.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: "0x" + (73571).toString(16),
+            chainName: "Tenderly VTestNet",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: [rpcUrl],
+          }],
+        }).then(() => switchChain(tenderlyVTestNet)).catch(console.warn);
+      });
+    }
+  }, [account, activeChain, switchChain]);
+
+  // Live balance — fetch directly from RPC for speed & reliability
+  const [ethBalance, setEthBalance] = useState<string | null>(null);
+
+  const fetchBalance = useCallback(async () => {
+    if (!account?.address) return;
+    try {
+      const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+      const res = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "eth_getBalance",
+          params: [account.address, "latest"],
+          id: 1,
+        }),
+      });
+      const data = await res.json();
+      if (data.result) {
+        const wei = BigInt(data.result);
+        const eth = Number(wei) / 1e18;
+        setEthBalance(eth.toFixed(3));
+      } else if (data.error) {
+        // Tenderly quota reached — keep last known balance
+        const msg = (data.error.message ?? "").toLowerCase();
+        if (msg.includes("quota") || msg.includes("limit") || msg.includes("upgrade")) {
+          if (!ethBalance) setEthBalance("—");
+        }
+      }
+    } catch {}
+  }, [account?.address]);
+
+  // Fetch balance on mount, account change, and after faucet/bet actions
+  useEffect(() => {
+    fetchBalance();
+  }, [fetchBalance, balanceRefreshKey]);
+
+  // Also keep thirdweb hook for ConnectButton internal display
+  const { refetch: refetchBalance } = useWalletBalance({
+    chain: tenderlyVTestNet,
+    address: account?.address,
+    client,
+  });
+
+  // Refetch both balances when refresh key changes
+  useEffect(() => {
+    if (balanceRefreshKey > 0) {
+      refetchBalance();
+      fetchBalance();
+    }
+  }, [balanceRefreshKey, refetchBalance, fetchBalance]);
 
   // Auto-fund wallet with 10 ETH when connected (Tenderly faucet)
   useEffect(() => {
@@ -314,12 +427,61 @@ export default function Home() {
         if (d.success) {
           console.log(`Funded ${account.address} with 10 ETH on Tenderly VTestNet`);
           sessionStorage.setItem(`funded_${account.address}`, "true");
+          pushInboxEvent(account.address, {
+            type: "faucet",
+            title: "Welcome Bonus: 10 ETH",
+            detail: "Your wallet was funded with 10 testnet ETH to get started with prediction markets.",
+            amount: "10",
+          });
+          // Immediately refresh balance display
+          refreshBalance();
+          fetchBalance();
         }
       })
       .catch(() => {});
-  }, [account?.address]);
+  }, [account?.address, refreshBalance]);
 
   const { protocols, loading: protocolsLoading, lastUpdated } = useDefiProtocols(parseInt(settingsUpdateInterval));
+
+  // Fetch risk insights from CRE pipeline (Gemini AI / deterministic)
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    const fetchInsights = async () => {
+      setInsightsLoading(true);
+      try {
+        const res = await fetch("/api/risk-insights");
+        if (!res.ok) throw new Error("Failed");
+        const data = await res.json();
+        if (cancelled) return;
+        setRiskInsights(data.insights ?? []);
+        setInsightsSource(data.source ?? "analysis");
+        setInsightsFetchedAt(Date.now());
+      } catch {
+        if (!cancelled) setRiskInsights([]);
+      } finally {
+        if (!cancelled) setInsightsLoading(false);
+      }
+    };
+    fetchInsights();
+    const interval = setInterval(fetchInsights, 600_000); // refresh every 10 min (matches API cache TTL, stays within Gemini free tier)
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [mounted]);
+
+  // Countdown timer for next CRE insight refresh
+  useEffect(() => {
+    if (!insightsFetchedAt) return;
+    const tick = () => {
+      const elapsed = Date.now() - insightsFetchedAt;
+      const remaining = Math.max(0, 600_000 - elapsed);
+      const mins = Math.floor(remaining / 60_000);
+      const secs = Math.floor((remaining % 60_000) / 1000);
+      setInsightsCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [insightsFetchedAt]);
 
   // Format TVL based on Number Format setting
   function formatTvl(tvl: number): string {
@@ -386,19 +548,38 @@ export default function Home() {
         </div>
       )}
       {vnetStatus === "rotated" && vnetInfo && (
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-risk-low/90 text-white text-center py-2 text-xs font-medium flex items-center justify-center gap-2">
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-risk-low/90 text-white text-center py-2 text-xs font-medium flex items-center justify-center gap-2 flex-wrap">
           <ShieldCheck className="h-3 w-3" />
           Rotated to new VTestNet: {vnetInfo.displayName}
           {vnetInfo.explorerUrl && (
             <a href={vnetInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="underline ml-1">Explorer</a>
           )}
-          <button onClick={() => setVnetStatus("ok")} className="ml-3 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Dismiss</button>
+          <button
+            onClick={async () => {
+              try {
+                const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+                await (window as any).ethereum?.request({
+                  method: "wallet_addEthereumChain",
+                  params: [{
+                    chainId: "0x" + (73571).toString(16),
+                    chainName: "Tenderly VTestNet",
+                    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                    rpcUrls: [rpcUrl],
+                  }],
+                });
+              } catch {}
+            }}
+            className="ml-2 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30 font-semibold"
+          >
+            Re-add to MetaMask
+          </button>
+          <button onClick={() => setVnetStatus("ok")} className="ml-1 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Dismiss</button>
         </div>
       )}
       {vnetStatus === "error" && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-risk-critical/90 text-white text-center py-2 text-xs font-medium flex items-center justify-center gap-2">
           <ShieldAlert className="h-3 w-3" />
-          VTestNet rotation failed — check TENDERLY_ACCESS_KEY in environment
+          VTestNet rotation failed — {vnetError || "unknown error"}
           <button onClick={() => setVnetStatus("ok")} className="ml-3 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Dismiss</button>
           <button onClick={handleVNetRotation} className="ml-1 rounded bg-white/20 px-2 py-0.5 text-[10px] hover:bg-white/30">Retry</button>
         </div>
@@ -456,7 +637,17 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            <WorldIDAuth onVerified={() => setIsWorldIdVerified(true)} />
+            <WorldIDAuth onVerified={() => {
+              setIsWorldIdVerified(true);
+              if (account?.address) {
+                pushInboxEvent(account.address, {
+                  type: "verified",
+                  title: "World ID Verified",
+                  detail: "You are now verified as a unique human. You can place predictions on all markets.",
+                });
+              }
+            }} />
+            {account && <Inbox address={account.address} />}
             <ConnectButton
               client={client}
               chains={[tenderlyVTestNet]}
@@ -473,6 +664,21 @@ export default function Home() {
                   padding: "0.5rem 0.875rem",
                 },
               }}
+              detailsButton={{
+                render: () => (
+                  <button className="flex items-center gap-2 rounded-lg border border-[hsl(222,30%,15%)] bg-[hsl(222,47%,7%)] px-3 py-2 text-white transition hover:border-sentinel-600/40">
+                    {ethBalance !== null && (
+                      <span className="flex items-center gap-1 text-[11px] font-semibold tabular-nums">
+                        {ethBalance}
+                        <span className="text-[9px] font-medium text-sentinel-400">ETH</span>
+                      </span>
+                    )}
+                    <span className="text-[10px] font-mono text-[hsl(var(--muted))]">
+                      {account?.address?.slice(0, 6)}...{account?.address?.slice(-4)}
+                    </span>
+                  </button>
+                ),
+              }}
               switchButton={{
                 label: "Switch to Tenderly",
                 style: {
@@ -485,6 +691,7 @@ export default function Home() {
                   padding: "0.5rem 0.875rem",
                 },
               }}
+              showAllWallets={true}
             />
           </div>
         </div>
@@ -553,7 +760,8 @@ export default function Home() {
                     <button
                       key={p.id}
                       onClick={() => setActiveProtocol(p.slug)}
-                      className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
+                      title={`${p.name} — ${p.category}\nTVL: ${formatTvl(p.tvl)}\nRisk: ${p.riskScore}/100 (${p.riskLevel})\nChains: ${p.chains?.slice(0, 3).join(", ") || "Multi-chain"}`}
+                      className={`group/proto relative flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
                         activeProtocol === p.slug
                           ? "border-sentinel-600/40 bg-sentinel-600/5"
                           : "border-[hsl(var(--card-border))] hover:border-[hsl(var(--card-border))]/80"
@@ -567,6 +775,18 @@ export default function Home() {
                         <p className="text-[9px] text-[hsl(var(--muted))]">
                           {formatTvl(p.tvl)} · Risk {p.riskScore}
                         </p>
+                      </div>
+                      {/* Hover tooltip */}
+                      <div className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 rounded-lg border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-3 py-2 opacity-0 shadow-lg transition-opacity group-hover/proto:opacity-100">
+                        <p className="whitespace-nowrap text-[10px] font-semibold">{p.name}</p>
+                        <p className="text-[9px] text-[hsl(var(--muted))]">{p.category}</p>
+                        <div className="mt-1 space-y-0.5 text-[9px]">
+                          <p>TVL: <span className="font-mono font-semibold">{formatTvl(p.tvl)}</span></p>
+                          <p>Risk: <span className={`font-semibold ${p.riskScore > 50 ? "text-risk-high" : "text-risk-low"}`}>{p.riskScore}/100</span> ({p.riskLevel})</p>
+                          {p.chains && p.chains.length > 0 && (
+                            <p className="text-[hsl(var(--muted))]">Chains: {p.chains.slice(0, 4).join(", ")}</p>
+                          )}
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -640,8 +860,106 @@ export default function Home() {
                     <p className="text-base font-bold text-[hsl(var(--foreground))]">60<span className="text-[9px] font-normal text-[hsl(var(--muted))]">s</span></p>
                   </div>
                 </div>
+                {/* Per-protocol risk breakdown */}
+                {protocols.length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-[9px] font-medium text-[hsl(var(--muted))]">Protocol Risk Breakdown</p>
+                    <div className="space-y-1">
+                      {[...protocols].sort((a, b) => b.riskScore - a.riskScore).map((p) => {
+                        const isAbove = p.riskScore > 70;
+                        return (
+                          <div key={p.id} className="flex items-center gap-2">
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isAbove ? "bg-risk-critical animate-pulse" : p.riskScore > 50 ? "bg-risk-high" : p.riskScore > 30 ? "bg-risk-medium" : "bg-risk-low"}`} />
+                            <span className="w-20 truncate text-[10px] font-medium">{p.name}</span>
+                            <div className="flex-1 h-1.5 rounded-full bg-[hsl(var(--background))] overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-700 ${isAbove ? "bg-risk-critical" : p.riskScore > 50 ? "bg-risk-high" : p.riskScore > 30 ? "bg-risk-medium" : "bg-risk-low"}`}
+                                style={{ width: `${Math.min(p.riskScore, 100)}%` }}
+                              />
+                            </div>
+                            <span className={`w-6 text-right text-[9px] font-mono font-semibold ${isAbove ? "text-risk-critical" : p.riskScore > 50 ? "text-risk-high" : "text-[hsl(var(--muted))]"}`}>
+                              {p.riskScore}
+                            </span>
+                            {isAbove && <span className="text-[7px] text-risk-critical font-bold">TRIP</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-[8px] text-[hsl(var(--muted))]">
+                      <span className="flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-risk-low" />Low &lt;30</span>
+                      <span className="flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-risk-medium" />Med 30-50</span>
+                      <span className="flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-risk-high" />High 50-70</span>
+                      <span className="flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-risk-critical" />Trip &gt;70</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* CRE Risk Insights Feed */}
+                <div className="mt-3">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <p className="flex items-center gap-1 text-[9px] font-medium text-[hsl(var(--muted))]">
+                      <Sparkles className="h-3 w-3 text-sentinel-400" />
+                      CRE Risk Insights
+                      <span className={`ml-1 rounded px-1 py-px text-[7px] font-semibold ${insightsSource === "gemini" ? "bg-[#A855F7]/15 text-[#A855F7]" : "bg-sentinel-600/15 text-sentinel-400"}`}>
+                        {insightsSource === "gemini" ? "Gemini AI" : "Analysis"}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {insightsCountdown && !insightsLoading && (
+                        <span className="flex items-center gap-1 text-[8px] font-mono text-[hsl(var(--muted))]">
+                          <Clock className="h-2.5 w-2.5" />
+                          {insightsCountdown}
+                        </span>
+                      )}
+                      {insightsLoading && (
+                        <span className="h-2 w-2 animate-spin rounded-full border border-sentinel-400 border-t-transparent" />
+                      )}
+                    </div>
+                  </div>
+                  {riskInsights.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {riskInsights.map((insight) => {
+                        const sevConfig = {
+                          critical: { icon: AlertTriangle, border: "border-risk-critical/30", bg: "bg-risk-critical/5", dot: "bg-risk-critical", text: "text-risk-critical" },
+                          warning: { icon: AlertTriangle, border: "border-risk-high/30", bg: "bg-risk-high/5", dot: "bg-risk-high", text: "text-risk-high" },
+                          info: { icon: Info, border: "border-sentinel-600/30", bg: "bg-sentinel-600/5", dot: "bg-sentinel-400", text: "text-sentinel-400" },
+                        }[insight.severity];
+                        const SevIcon = sevConfig.icon;
+                        return (
+                          <div
+                            key={insight.id}
+                            className={`rounded-lg border ${sevConfig.border} ${sevConfig.bg} px-2.5 py-2 transition-colors`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <SevIcon className={`mt-0.5 h-3 w-3 shrink-0 ${sevConfig.text}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`h-1.5 w-1.5 rounded-full ${sevConfig.dot} ${insight.severity === "critical" ? "animate-pulse" : ""}`} />
+                                  <p className="text-[10px] font-semibold leading-tight">{insight.title}</p>
+                                </div>
+                                <p className="mt-0.5 text-[9px] leading-relaxed text-[hsl(var(--muted))]">
+                                  {insight.detail}
+                                </p>
+                                {insight.protocol && (
+                                  <span className="mt-1 inline-block rounded bg-[hsl(var(--background))] px-1.5 py-0.5 text-[8px] font-mono text-[hsl(var(--muted))]">
+                                    {insight.protocol}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : !insightsLoading ? (
+                    <div className="rounded-lg border border-dashed border-[hsl(var(--card-border))] px-3 py-4 text-center">
+                      <p className="text-[9px] text-[hsl(var(--muted))]">Awaiting CRE pipeline data...</p>
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="mt-2 rounded-lg bg-[hsl(var(--background))] px-3 py-2 text-[9px] text-[hsl(var(--muted))]">
-                  <span className="font-medium">How it works:</span> CRE reads RiskOracle every 60s. If score {">"} 70, SafeguardController circuit breaker engages automatically on-chain.
+                  <span className="font-medium">How it works:</span> CRE RiskMonitor → Gemini AI scoring → RiskOracle on-chain → SafeguardController. If score {">"} 70, circuit breaker engages automatically.
                 </div>
               </div>
 
@@ -809,6 +1127,14 @@ export default function Home() {
                     isVerified={isWorldIdVerified}
                     decimalPrecision={parseInt(settingsDecimalPrecision)}
                     displayCurrency={settingsDisplayCurrency}
+                    walletBalance={ethBalance}
+                    txMode={txMode}
+                    onBalanceChange={refreshBalance}
+                    onInboxEvent={(type, title, detail, extra) => {
+                      if (account?.address) {
+                        pushInboxEvent(account.address, { type: type as any, title, detail, ...extra });
+                      }
+                    }}
                   />
                 ))}
               </div>
@@ -979,6 +1305,140 @@ export default function Home() {
                 )}
               </h2>
 
+              {/* ─── Active VTestNet Info ─── */}
+              {(() => {
+                const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+                const activeVnet = vnetHistory.find((v) => !v.retired);
+                // Extract VNet ID from RPC URL (last path segment)
+                const vnetIdMatch = rpcUrl.match(/\/([a-f0-9-]{36})$/);
+                const vnetId = activeVnet?.id ?? vnetIdMatch?.[1] ?? null;
+                const tenderlySlug = activeVnet?.slug ?? null;
+                const accountSlug = process.env.NEXT_PUBLIC_TENDERLY_ACCOUNT_SLUG ?? "CryptYP";
+                const projectSlug = process.env.NEXT_PUBLIC_TENDERLY_PROJECT_SLUG ?? "project";
+                const explorerUrl = activeVnet?.explorerUrl
+                  ?? (tenderlySlug ? `https://dashboard.tenderly.co/${accountSlug}/${projectSlug}/testnet/${tenderlySlug}` : null);
+                return (
+                  <div className="mb-4 rounded-lg border border-[#7C3AED]/30 bg-[#7C3AED]/5 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#7C3AED] opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7C3AED]" />
+                        </span>
+                        <span className="text-[11px] font-semibold text-[#7C3AED]">Active VTestNet</span>
+                      </div>
+                      {explorerUrl && (
+                        <a
+                          href={explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 rounded-md bg-[#7C3AED]/15 px-2 py-1 text-[9px] font-medium text-[#7C3AED] transition hover:bg-[#7C3AED]/25"
+                        >
+                          <ExternalLink className="h-2.5 w-2.5" />
+                          Open Explorer
+                        </a>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {vnetId && (
+                        <div className="flex items-center gap-2 text-[10px]">
+                          <span className="text-[hsl(var(--muted))]">ID:</span>
+                          <code className="rounded bg-[hsl(var(--background))] px-1.5 py-0.5 font-mono text-[9px] text-[hsl(var(--foreground))]">{vnetId}</code>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="text-[hsl(var(--muted))]">Chain:</span>
+                        <span className="font-medium">73571 (Sepolia fork)</span>
+                      </div>
+                      {vnetBlockNumber && (
+                        <div className="flex items-center gap-2 text-[10px]">
+                          <span className="text-[hsl(var(--muted))]">Block:</span>
+                          <span className="font-mono font-medium">#{vnetBlockNumber.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="shrink-0 text-[hsl(var(--muted))]">RPC:</span>
+                        <a
+                          href={rpcUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 truncate rounded bg-[hsl(var(--background))] px-1.5 py-0.5 font-mono text-[8px] text-[#7C3AED] hover:underline"
+                          title={rpcUrl}
+                        >
+                          {rpcUrl}
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ─── Add to MetaMask ─── */}
+              <div className="mb-4 rounded-lg border border-sentinel-600/20 bg-sentinel-600/5 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Globe className="h-3.5 w-3.5 text-sentinel-400" />
+                  <span className="text-[11px] font-semibold text-sentinel-400">Tenderly VTestNet Chain</span>
+                </div>
+                <p className="mb-2.5 text-[10px] text-[hsl(var(--muted))]">
+                  Add the current Tenderly VTestNet to MetaMask to see your testnet ETH balance and sign transactions. Re-add after each VTestNet rotation.
+                </p>
+                <button
+                  onClick={async () => {
+                    try {
+                      const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+                      await (window as any).ethereum?.request({
+                        method: "wallet_addEthereumChain",
+                        params: [{
+                          chainId: "0x11F63",
+                          chainName: "Tenderly VTestNet",
+                          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                          rpcUrls: [rpcUrl],
+                        }],
+                      });
+                    } catch (err) {
+                      console.warn("Add chain failed:", err);
+                    }
+                  }}
+                  className="rounded-lg bg-sentinel-600/15 px-3 py-1.5 text-[11px] font-medium text-sentinel-400 transition hover:bg-sentinel-600/25"
+                >
+                  Add to MetaMask
+                </button>
+              </div>
+
+              {/* ─── Transaction Mode Toggle ─── */}
+              <div className="mb-4 rounded-lg border border-[hsl(var(--card-border))] bg-[hsl(var(--background))] p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Fingerprint className="h-3.5 w-3.5 text-sentinel-400" />
+                      <span className="text-[11px] font-semibold">Transaction Mode</span>
+                    </div>
+                    <p className="text-[9px] text-[hsl(var(--muted))] max-w-[280px]">
+                      {txMode === "wallet"
+                        ? "Wallet Signing — transactions go through MetaMask for approval. Requires Tenderly VTestNet added to your wallet."
+                        : "Admin RPC — transactions execute directly via Tenderly Admin RPC. No wallet popup, faster for testing."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setTxMode(txMode === "wallet" ? "admin" : "wallet")}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                      txMode === "wallet" ? "bg-sentinel-500" : "bg-[#7C3AED]"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ${
+                        txMode === "wallet" ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-[10px]">
+                  <span className={`font-medium ${txMode === "admin" ? "text-[#7C3AED]" : "text-[hsl(var(--muted))]"}`}>Admin RPC</span>
+                  <span className="text-[hsl(var(--muted))]">|</span>
+                  <span className={`font-medium ${txMode === "wallet" ? "text-sentinel-400" : "text-[hsl(var(--muted))]"}`}>Wallet Signing</span>
+                </div>
+              </div>
+
               {/* ─── Faucet ─── */}
               <div className="mb-4 rounded-lg border border-[#7C3AED]/20 bg-[#7C3AED]/5 p-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -995,9 +1455,9 @@ export default function Home() {
                       <code className="font-mono text-[hsl(var(--foreground))]">{account.address.slice(0, 6)}...{account.address.slice(-4)}</code>
                     </div>
                     <div className="flex gap-2">
-                      <FaucetButton address={account.address} amount="10" />
-                      <FaucetButton address={account.address} amount="100" />
-                      <FaucetButton address={account.address} amount="1000" />
+                      <FaucetButton address={account.address} amount="10" onFunded={refreshBalance} />
+                      <FaucetButton address={account.address} amount="100" onFunded={refreshBalance} />
+                      <FaucetButton address={account.address} amount="1000" onFunded={refreshBalance} />
                     </div>
                   </div>
                 ) : (
@@ -1033,73 +1493,86 @@ export default function Home() {
               {vnetHistory.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-[9px] font-semibold text-[hsl(var(--muted))] uppercase tracking-wider">Instance History</p>
-                  {vnetHistory.slice(0, 5).map((v, i) => (
-                    <div key={v.id ?? i} className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] ${i === 0 && !v.retired ? "bg-[#7C3AED]/10 border border-[#7C3AED]/20" : "bg-[hsl(var(--background))]"}`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`h-1.5 w-1.5 rounded-full ${i === 0 && !v.retired ? "bg-[#7C3AED]" : "bg-[hsl(var(--muted))]/40"}`} />
-                        <span className="font-medium">{v.displayName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[hsl(var(--muted))]">{new Date(v.createdAt).toLocaleString()}</span>
-                        {v.explorerUrl && (
-                          <a href={v.explorerUrl} target="_blank" rel="noopener noreferrer" className="text-[#7C3AED] hover:underline">
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        )}
+                  {vnetHistory.slice(0, 5).map((v, i) => {
+                    const isActive = i === 0 && !v.retired;
+                    const explorerLink = v.explorerUrl ?? (v.slug ? `https://dashboard.tenderly.co/CryptYP/project/testnet/${v.slug}` : null);
+                    return (
+                    <div key={v.id ?? i} className={`rounded-md px-2.5 py-1.5 text-[10px] ${isActive ? "bg-[#7C3AED]/10 border border-[#7C3AED]/20" : "bg-[hsl(var(--background))]"}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-[#7C3AED]" : "bg-[hsl(var(--muted))]/40"}`} />
+                          <span className="font-medium">{v.displayName}</span>
+                          {isActive && <span className="rounded bg-[#7C3AED]/20 px-1 py-px text-[7px] font-bold text-[#7C3AED]">ACTIVE</span>}
+                          {v.retired && <span className="rounded bg-[hsl(var(--muted))]/10 px-1 py-px text-[7px] text-[hsl(var(--muted))]">RETIRED</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[hsl(var(--muted))]">{new Date(v.createdAt).toLocaleString()}</span>
+                          {explorerLink && (
+                            <a href={explorerLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#7C3AED] hover:underline">
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             {/* ─── HOW IT WORKS — SPONSOR INTEGRATION MAP ─── */}
+            {/* Prize tracks: All 9 tracks demonstrated through this pipeline */}
             <div className="card">
-              <h2 className="mb-4 text-sm font-semibold">How OmniSentinel Works</h2>
+              <h2 className="mb-1 text-sm font-semibold">How OmniSentinel Works</h2>
+              <p className="mb-4 text-[9px] text-[hsl(var(--muted))]">
+                End-to-end CRE pipeline — each step maps to a hackathon prize track
+              </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <IntegrationCard
                   step="1"
                   title="Data Ingestion"
-                  description="DeFi Llama provides real-time TVL and protocol health data across chains"
-                  tech={["DeFi Llama API", "Cross-chain data"]}
+                  description="DeFi Llama API provides real-time TVL, 1d/7d changes, and protocol health data. /api/defi endpoint caches with 8s timeout fallback."
+                  tech={["DeFi Llama API", "Cross-chain TVL", "In-memory cache"]}
                   color="text-risk-low"
                 />
                 <IntegrationCard
                   step="2"
-                  title="AI Risk Analysis"
-                  description="Chainlink CRE RiskMonitor workflow processes data through Gemini AI to generate risk scores"
-                  tech={["Chainlink CRE", "Gemini AI"]}
+                  title="AI Risk Scoring"
+                  description="CRE RiskMonitor feeds protocol data through Gemini 2.5 Flash AI to generate risk scores (0-100). Live insights displayed in Circuit Breaker card."
+                  tech={["Chainlink CRE", "Gemini 2.5 Flash", "/api/risk-insights"]}
                   color="text-[#375BD2]"
                 />
                 <IntegrationCard
                   step="3"
                   title="On-Chain Oracle"
-                  description="Risk scores are written to RiskOracle smart contract on Tenderly Virtual TestNet"
-                  tech={["Solidity Contracts", "Tenderly VTestNet"]}
+                  description="AI-generated risk scores are written to RiskOracle smart contract on Tenderly VTestNet via CRE writeToChain capability."
+                  tech={["RiskOracle.sol", "Tenderly VTestNet", "IReceiver"]}
                   color="text-[#7C3AED]"
                 />
                 <IntegrationCard
                   step="4"
-                  title="Automated Safeguards"
-                  description="CRE SafeguardTrigger monitors scores every 60s and triggers circuit breaker if threshold exceeded"
-                  tech={["Chainlink CRE", "Circuit Breaker"]}
+                  title="Circuit Breaker"
+                  description="SafeguardController reads RiskOracle every 60s. Score > 70 triggers circuit breaker automatically on-chain. Live status shown in dashboard."
+                  tech={["SafeguardController.sol", "CRE SafeguardTrigger"]}
                   color="text-risk-high"
                 />
                 <IntegrationCard
                   step="5"
                   title="Prediction Markets"
-                  description="World ID verified users bet on protocol safety events. CRE MarketSettler resolves with AI"
-                  tech={["World ID", "Chainlink CRE", "Gemini AI"]}
+                  description="World ID verified users bet on DeFi safety events with real ETH via MetaMask wallet signing. CRE MarketSettler resolves outcomes with AI."
+                  tech={["World ID", "PredictionMarket.sol", "Wallet Signing"]}
                   color="text-[#00C3B6]"
                 />
                 <IntegrationCard
                   step="6"
-                  title="User Interface"
-                  description="thirdweb SDK powers wallet connection, contract reads, and transaction signing throughout"
-                  tech={["thirdweb SDK", "ConnectButton", "useReadContract"]}
+                  title="Wallet & UI"
+                  description="thirdweb ConnectButton + MetaMask integration with auto chain switching. Direct RPC balance display, transaction mode toggle (Wallet/Admin)."
+                  tech={["thirdweb SDK", "MetaMask", "Tenderly Admin RPC"]}
                   color="text-[#A855F7]"
                 />
               </div>
+
             </div>
           </>
         )}
@@ -1589,7 +2062,7 @@ function ServiceRow({
   );
 }
 
-function FaucetButton({ address, amount }: { address: string; amount: string }) {
+function FaucetButton({ address, amount, onFunded }: { address: string; amount: string; onFunded?: () => void }) {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const ethHex = amount === "10" ? "0x8AC7230489E80000" : amount === "100" ? "0x56BC75E2D63100000" : "0x3635C9ADC5DEA00000";
 
@@ -1603,6 +2076,15 @@ function FaucetButton({ address, amount }: { address: string; amount: string }) 
       });
       const data = await res.json();
       setStatus(data.success ? "done" : "error");
+      if (data.success) {
+        onFunded?.();
+        pushInboxEvent(address, {
+          type: "faucet",
+          title: `Faucet: +${amount} ETH`,
+          detail: `${amount} testnet ETH added to your wallet from the Tenderly VTestNet faucet.`,
+          amount,
+        });
+      }
       setTimeout(() => setStatus("idle"), 3000);
     } catch {
       setStatus("error");

@@ -30,31 +30,32 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
     // No blocking handleVerify — this is the pattern that was working before.
     setVerifying(true);
 
-    // Immediately mark as verified (proof already validated by World App)
+    // Immediately mark as verified in UI (proof already validated by World App)
     setVerified(true);
     setVerifying(false);
     onVerified?.();
 
-    // Fire-and-forget backend verification in background
-    try {
-      const response = await fetch("/api/verify-worldid", {
+    // Mark wallet as World ID verified ON-CHAIN so takePosition() works
+    if (account?.address) {
+      fetch("/api/tenderly/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proof: result,
-          address: account?.address,
-        }),
-      });
-
-      if (response.ok) {
-        console.log("Backend verification confirmed");
-      } else {
-        console.warn("Backend verification failed (proof still valid via bridge)");
-      }
-    } catch (error) {
-      // Backend verify failed but proof is already validated by World App
-      console.warn("Backend verify error:", error);
+        body: JSON.stringify({ address: account.address }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) console.log("On-chain World ID verification set for", account.address);
+          else console.warn("On-chain verify failed:", d.error);
+        })
+        .catch((err) => console.warn("On-chain verify error:", err));
     }
+
+    // Fire-and-forget backend World ID proof verification
+    fetch("/api/verify-worldid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proof: result, address: account?.address }),
+    }).catch(() => {});
   }
 
   if (verified) {
@@ -86,17 +87,14 @@ export function WorldIDAuth({ onVerified }: { onVerified?: () => void }) {
         onSuccess={handleSuccess}
       >
         {({ open }) => (
-          <div className="flex flex-col items-start gap-1">
-            <button
-              onClick={open}
-              disabled={verifying}
-              className="flex items-center gap-1.5 rounded-lg border border-sentinel-600/30 bg-sentinel-600/10 px-3 py-2 text-xs font-medium text-sentinel-400 transition hover:bg-sentinel-600/20 disabled:opacity-50"
-            >
-              <Fingerprint className="h-3.5 w-3.5" />
-              {verifying ? "Verifying..." : "Verify with World ID"}
-            </button>
-            <p className="text-[9px] text-[hsl(var(--muted))] pl-0.5">Scan the QR code with your phone camera</p>
-          </div>
+          <button
+            onClick={open}
+            disabled={verifying}
+            className="flex items-center gap-1.5 rounded-lg border border-sentinel-600/30 bg-sentinel-600/10 px-3 py-2 text-xs font-medium text-sentinel-400 transition hover:bg-sentinel-600/20 disabled:opacity-50"
+          >
+            <Fingerprint className="h-3.5 w-3.5" />
+            {verifying ? "Verifying..." : "Verify with World ID"}
+          </button>
         )}
       </IDKitWidget>
 

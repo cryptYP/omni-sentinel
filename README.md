@@ -1,109 +1,201 @@
-# OmniSentinel — AI-Powered Cross-Chain Risk Intelligence & Prediction Protocol
+# OmniSentinel
 
-An AI-driven CRE workflow platform that monitors DeFi protocol health across chains, generates risk scores, resolves prediction markets on protocol safety events, and enforces automated compliance safeguards — all orchestrated through Chainlink CRE with World ID sybil resistance, tested on Tenderly Virtual TestNets, and built with thirdweb SDKs.
+**AI-powered cross-chain DeFi Risk Intelligence & Prediction Market Protocol via Chainlink CRE**
 
-## Prize Tracks
+---
 
-| Track | Prize Pool | How We Qualify |
-|-------|-----------|----------------|
-| DeFi & Tokenization | $20,000 | Custom Proof-of-Reserve-style data feed via AI risk scoring |
-| CRE & AI | $17,000 | Gemini AI integration in RiskMonitor and MarketSettler CRE workflows |
-| Prediction Markets | $16,000 | AI-settled prediction markets on DeFi safety events |
-| Risk & Compliance | $16,000 | Automated circuit breaker triggered by risk threshold monitoring |
-| Privacy | $16,000 | Confidential HTTP workflow for private risk data aggregation |
-| Best use of World ID with CRE | $5,000 | Sybil-resistant prediction market participation via World ID |
-| Tenderly Virtual TestNets | $5,000 | All contracts deployed and tested on Tenderly VTestNet |
-| thirdweb x CRE | Plan prizes | thirdweb SDK for wallet connection and contract interaction |
-| Top 10 Projects | $15,000 | Catch-all for quality |
+## What is OmniSentinel?
 
-## Architecture
+OmniSentinel is an autonomous DeFi safety system that uses Chainlink's Compute Runtime Environment (CRE) to continuously monitor protocol health, generate AI-driven risk scores, settle prediction markets, and trigger circuit breakers — all on-chain, all trustless.
+
+The protocol solves a critical gap in DeFi: there is no standardized, automated, on-chain mechanism to assess cross-protocol risk in real time and take protective action before cascading failures occur. Manual monitoring doesn't scale, centralized risk feeds introduce trust assumptions, and existing circuit breakers are protocol-specific with no cross-chain visibility.
+
+OmniSentinel fixes this by combining:
+- **Chainlink CRE workflows** that run on a decentralized oracle network (DON) with multi-node consensus
+- **Gemini AI** for intelligent risk analysis beyond simple threshold checks
+- **On-chain circuit breakers** that autonomously pause, limit, or emergency-halt based on risk scores
+- **Prediction markets** where users bet on DeFi safety events, settled by CRE + AI with World ID sybil resistance
+
+## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js + thirdweb)          │
-│  - World ID login (IDKit)                                │
-│  - Prediction market UI                                  │
-│  - Risk dashboard                                        │
-│  - thirdweb ConnectWallet + contract interactions        │
-└──────────────┬───────────────────────────┬───────────────┘
-               │                           │
-               ▼                           ▼
-┌──────────────────────┐    ┌──────────────────────────────┐
-│  Smart Contracts      │    │  CRE Workflows (TypeScript)  │
-│  (Solidity)           │    │                              │
-│  - PredictionMarket   │    │  Workflow 1: RiskMonitor     │
-│  - RiskOracle         │    │    - Cron trigger (5 min)    │
-│  - SafeguardController│    │    - Fetch protocol data     │
-│  - WorldIDVerifier    │    │    - AI risk analysis        │
-│  - IReceiver consumer │    │    - Write risk score onchain│
-│                       │    │                              │
-│  Deployed on:         │    │  Workflow 2: MarketSettler   │
-│  - Sepolia testnet    │    │    - EVM Log trigger         │
-│  - Tenderly VTestNet  │    │    - AI outcome resolution   │
-│  (forked Sepolia)     │    │    - Write settlement report │
-│                       │    │                              │
-│                       │    │  Workflow 3: SafeguardTrigger│
-│                       │    │    - Cron trigger (1 min)    │
-│                       │    │    - Monitor reserve ratios  │
-│                       │    │    - Trigger circuit breaker │
-└──────────────────────┘    └──────────────────────────────┘
+                        ┌─────────────────────┐
+                        │   DeFi Llama API     │
+                        │   (Live TVL Data)    │
+                        └─────────┬───────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  CHAINLINK CRE (DON)                        │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                 │
+│  │  RiskMonitor      │  │  MarketSettler   │                 │
+│  │  (Cron: 5 min)    │  │  (EVM Log)       │                 │
+│  │                   │  │                   │                 │
+│  │  HTTP → Gemini AI │  │  Event → Gemini  │                 │
+│  │  → Consensus      │  │  + Google Search  │                 │
+│  │  → Write onchain  │  │  → Consensus     │                 │
+│  └────────┬─────────┘  │  → Write onchain  │                 │
+│           │             └────────┬──────────┘                 │
+│  ┌────────┴─────────┐           │                             │
+│  │ SafeguardTrigger  │  ┌───────┴────────────┐               │
+│  │ (Cron: 1 min)     │  │ PrivateRiskMonitor │               │
+│  │                   │  │ (Cron: 10 min)     │               │
+│  │ Read RiskOracle   │  │                    │               │
+│  │ → Threshold check │  │ ConfidentialHTTP   │               │
+│  │ → Circuit breaker │  │ → TEE computation  │               │
+│  └────────┬─────────┘  │ → Aggregate only   │               │
+│           │             └────────┬───────────┘               │
+└───────────┼──────────────────────┼───────────────────────────┘
+            │                      │
+            ▼                      ▼
+┌──────────────────────────────────────────────────────────────┐
+│              SMART CONTRACTS (Tenderly VTestNet)              │
+│                                                              │
+│  RiskOracle ◄──── AI risk scores (0-100) per protocol        │
+│       │                                                      │
+│       ▼                                                      │
+│  SafeguardController ◄──── PAUSE / LIMIT / EMERGENCY         │
+│                                                              │
+│  PredictionMarket ◄──── Settlement outcomes + confidence     │
+│       │                                                      │
+│       ▼                                                      │
+│  WorldIDVerifier ◄──── ZK proof verification (sybil gate)    │
+└──────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────────────────────┐
+│              FRONTEND (Next.js + thirdweb)                    │
+│                                                              │
+│  Risk Dashboard  │  Prediction Markets  │  Portfolio          │
+│  Circuit Breaker │  CRE Activity Feed   │  World ID Auth     │
+│  Gemini Insights │  Settings            │  Developer Tools   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Chainlink CRE Files
+### The CRE Pipeline
 
-All CRE workflow files and smart contracts that use Chainlink:
+1. **RiskMonitor** runs every 5 minutes on the Chainlink DON. Each node independently fetches live protocol data (TVL, volume, utilization) from DeFi Llama, feeds it through Gemini AI for analysis, and produces a risk score (0-100). Scores are aggregated via `consensusMedianAggregation` across nodes and written to the `RiskOracle` smart contract.
 
-### CRE Workflows
-- [Risk Monitor Workflow](./cre-workflows/risk-monitor-workflow/main.ts) — Cron-triggered AI risk analysis
-- [Risk Monitor Config](./cre-workflows/risk-monitor-workflow/config.staging.json)
-- [Market Settler Workflow](./cre-workflows/market-settler-workflow/main.ts) — EVM Log-triggered AI settlement
-- [Market Settler Config](./cre-workflows/market-settler-workflow/config.staging.json)
-- [Safeguard Trigger Workflow](./cre-workflows/safeguard-trigger-workflow/main.ts) — Automated circuit breaker
-- [Safeguard Trigger Config](./cre-workflows/safeguard-trigger-workflow/config.staging.json)
-- [Private Risk Monitor Workflow](./cre-workflows/private-risk-monitor-workflow/main.ts) — **Privacy track**: Confidential HTTP risk data aggregation
-- [Private Risk Monitor Config](./cre-workflows/private-risk-monitor-workflow/config.staging.json)
+2. **SafeguardTrigger** runs every minute. It reads the latest risk score from `RiskOracle` on-chain and applies tiered escalation:
+   - Score 50-75: `PAUSE` (reduce exposure)
+   - Score 75-90: `LIMIT` (halt non-critical operations)
+   - Score 90+: `EMERGENCY` (full lockdown)
 
-### Smart Contracts (CRE Consumer Contracts implementing IReceiver)
-- [IReceiver Interface](./contracts/src/interfaces/IReceiver.sol) — CRE consumer interface
-- [RiskOracle](./contracts/src/RiskOracle.sol) — Receives AI-generated risk scores from CRE
-- [PredictionMarket](./contracts/src/PredictionMarket.sol) — Prediction market settled by CRE + AI
-- [SafeguardController](./contracts/src/SafeguardController.sol) — Circuit breaker triggered by CRE
-- [WorldIDVerifier](./contracts/src/WorldIDVerifier.sol) — World ID proof verification
-- [Deployment Script](./contracts/script/Deploy.s.sol)
+3. **MarketSettler** listens for `SettlementRequested` events from the `PredictionMarket` contract. When a market expires and settlement is requested, CRE nodes use Gemini AI with Google Search grounding to fact-check the prediction question against real-world data. Outcomes are aggregated via `consensusIdenticalAggregation` (all nodes must agree) and written on-chain.
 
-### Tests
-- [RiskOracle Tests](./contracts/test/RiskOracle.t.sol)
-- [PredictionMarket Tests](./contracts/test/PredictionMarket.t.sol)
-- [SafeguardController Tests](./contracts/test/SafeguardController.t.sol)
+4. **PrivateRiskMonitor** uses CRE's `ConfidentialHTTPClient` to fetch sensitive portfolio data inside a Trusted Execution Environment (TEE). Individual position sizes and concentrations are never exposed — only the aggregate risk score is published on-chain.
 
-### Frontend Files (Next.js + thirdweb)
-- [layout.tsx](./frontend/src/app/layout.tsx) — Root layout, ThirdwebProvider wrapper (**thirdweb**)
-- [page.tsx](./frontend/src/app/page.tsx) — Main dashboard: Consumer, Developer, Settings views (**thirdweb, World ID, CRE, Tenderly, DeFi Llama**)
-- [globals.css](./frontend/src/app/globals.css) — Theme system with dynamic CSS variables for settings
-- [error.tsx](./frontend/src/app/error.tsx) — Error boundary component
-- [not-found.tsx](./frontend/src/app/not-found.tsx) — 404 page
-- [/api/defi/route.ts](./frontend/src/app/api/defi/route.ts) — Protocol list API, live TVL from **DeFi Llama**
-- [/api/defi/[protocol]/route.ts](./frontend/src/app/api/defi/%5Bprotocol%5D/route.ts) — Protocol detail API, dynamic risk scoring from **DeFi Llama**
-- [/api/verify-worldid/route.ts](./frontend/src/app/api/verify-worldid/route.ts) — **World ID** server-side proof verification
-- [WorldIDAuth.tsx](./frontend/src/components/WorldIDAuth.tsx) — **World ID** IDKit widget, sybil-resistant verification (**World ID**)
-- [RiskChart.tsx](./frontend/src/components/RiskChart.tsx) — Risk score visualization (Area/Line/Bar/Candlestick charts)
-- [MarketCard.tsx](./frontend/src/components/MarketCard.tsx) — Prediction market card with multi-currency display
-- [Portfolio.tsx](./frontend/src/components/Portfolio.tsx) — Wallet portfolio view (**thirdweb, World ID**)
-- [ActivityFeed.tsx](./frontend/src/components/ActivityFeed.tsx) — Simulated CRE workflow activity feed (**Chainlink CRE**)
-- [contracts.ts](./frontend/src/lib/contracts.ts) — Smart contract ABIs + **Tenderly VTestNet** chain config (**thirdweb**)
-- [hooks.ts](./frontend/src/lib/hooks.ts) — Data hooks for **DeFi Llama** protocol data
-- [thirdweb.ts](./frontend/src/lib/thirdweb.ts) — **thirdweb** client initialization
-- [utils.ts](./frontend/src/lib/utils.ts) — Shared utility functions
+### Risk Scoring Model
+
+Risk scores are TVL-based with dynamic adjustments:
+| TVL Range | Base Score | Risk Level |
+|-----------|-----------|------------|
+| > $10B | 18 | Low |
+| $5B-$10B | 32 | Medium |
+| $1B-$5B | 48 | Elevated |
+| $100M-$1B | 65 | High |
+| < $100M | 82 | Critical |
+
+Additional factors: day-over-day TVL volatility, 7-day rolling standard deviation, cross-protocol correlation.
+
+**Circuit breaker threshold: 70/100** — when any protocol's score exceeds this, SafeguardController engages automatically.
+
+## How It's Built
+
+### Smart Contracts (Solidity)
+- **RiskOracle**: Receives signed risk reports from CRE via `IReceiver.onReport()`. Maintains per-protocol score history, emits severity-tiered `SafeguardAlert` events.
+- **PredictionMarket**: Full prediction market lifecycle — create markets, take YES/NO positions with ETH stakes, request CRE settlement, claim pro-rata winnings. Requires World ID verification for sybil resistance.
+- **SafeguardController**: State machine (ACTIVE → PAUSED → LIMITED → EMERGENCY) driven by CRE risk threshold reports. Maintains audit trail of all triggers.
+- **WorldIDVerifier**: Validates ZK proofs from World ID, tracks nullifiers to prevent replay, gates prediction market access.
+
+### CRE Workflows (TypeScript)
+- Built with Chainlink CRE SDK using `CronCapability`, `EVMLogTrigger`, `HTTPClient`, `ConfidentialHTTPClient`, `EVMClient`
+- Gemini AI integration with temperature 0.1 for deterministic outputs
+- `encodeAbiParameters` (viem) for typed on-chain data delivery
+- Multi-node consensus: median aggregation for risk scores, identical aggregation for settlements
+
+### Frontend (Next.js 14 + thirdweb)
+- **thirdweb SDK**: `ConnectButton`, `useActiveAccount`, `useWalletBalance`, `useSendTransaction`, `useSwitchActiveWalletChain` for wallet connection and contract interaction
+- **World ID**: `@worldcoin/idkit` widget for ZK proof generation, server-side verification via `/api/verify-worldid`
+- **Gemini AI insights**: `/api/risk-insights` endpoint with 10-minute cache (free tier optimized at ~144 calls/day)
+- **DeFi Llama**: Live protocol TVL data with dynamic risk scoring and 90-day history charts (Area, Line, Bar, Candlestick)
+- **Tenderly VTestNet**: Auto-rotation when block limits are reached, old VTestNet cleanup to stay within free tier, faucet integration
+
+### Infrastructure
+- **Tenderly Virtual TestNet**: Forked Sepolia (Chain ID 73571) with public explorer, auto-rotation via REST API
+- **Foundry**: Smart contract compilation, testing, and deployment
+- **Vercel-ready**: Next.js App Router with Edge-compatible API routes
+
+## Challenges
+
+1. **Gemini AI response parsing**: Gemini 2.5 Flash returns a "thinking" part before the actual text response. Initial integration failed with "No JSON in response" because we were reading only the first part. Fixed by joining all parts and extracting JSON via regex.
+
+2. **Tenderly VTestNet quota management**: The free tier limits the number of concurrent VTestNets. We accumulated 10+ old instances that consumed quota, causing all RPC calls to fail. Built an auto-cleanup system that keeps max 2 VTestNets and deletes old ones before rotation.
+
+3. **Multi-node consensus for AI outputs**: AI models are non-deterministic, so getting identical outputs across CRE DON nodes for market settlement was challenging. Solved by using very low temperature (0.1), structured JSON output, and `consensusIdenticalAggregation` for settlements vs `consensusMedianAggregation` for numeric risk scores.
+
+4. **Privacy-preserving risk aggregation**: Publishing portfolio risk without exposing individual positions required CRE's `ConfidentialHTTPClient` + TEE architecture. The workflow encrypts API credentials and response data so node operators never see sensitive portfolio details — only the aggregate score is published on-chain.
+
+5. **World ID + prediction markets integration**: Ensuring one-human-one-vote in prediction markets while maintaining privacy required careful nullifier tracking. The ZK proof verification on-chain prevents replay attacks without revealing user identity.
+
+6. **Wallet chain switching**: Auto-switching users from their current network to the Tenderly VTestNet (Chain ID 73571) required fallback logic — if thirdweb's `switchChain` fails, we fall back to raw MetaMask `wallet_addEthereumChain` RPC calls.
+
+## Chainlink CRE Usage
+
+All CRE workflow code is in the [`cre-workflows/`](./cre-workflows/) directory:
+
+| Workflow | File | Trigger | Chainlink Capabilities |
+|----------|------|---------|----------------------|
+| RiskMonitor | [`main.ts`](./cre-workflows/risk-monitor-workflow/main.ts) | CronCapability (5 min) | HTTPClient, Gemini AI, consensusMedianAggregation, EVMClient.writeReport |
+| MarketSettler | [`main.ts`](./cre-workflows/market-settler-workflow/main.ts) | EVMLogTrigger | Event decoding, Gemini AI + Google Search, consensusIdenticalAggregation, EVMClient.writeReport |
+| SafeguardTrigger | [`main.ts`](./cre-workflows/safeguard-trigger-workflow/main.ts) | CronCapability (1 min) | EVMClient.callContract (read RiskOracle), threshold logic, EVMClient.writeReport |
+| PrivateRiskMonitor | [`main.ts`](./cre-workflows/private-risk-monitor-workflow/main.ts) | CronCapability (10 min) | ConfidentialHTTPClient (TEE), privacy-preserving aggregation, EVMClient.writeReport |
+
+Smart contracts implementing Chainlink's `IReceiver` interface:
+- [`RiskOracle.sol`](./contracts/src/RiskOracle.sol) — Receives AI risk scores from CRE
+- [`PredictionMarket.sol`](./contracts/src/PredictionMarket.sol) — Receives settlement outcomes from CRE
+- [`SafeguardController.sol`](./contracts/src/SafeguardController.sol) — Receives circuit breaker triggers from CRE
+- [`IReceiver.sol`](./contracts/src/interfaces/IReceiver.sol) — The shared CRE consumer interface
+
+Frontend CRE integration:
+- [`/api/risk-insights/route.ts`](./frontend/src/app/api/risk-insights/route.ts) — Gemini AI risk analysis mirroring the CRE RiskMonitor pipeline
+- [`page.tsx`](./frontend/src/app/page.tsx) — CRE pipeline visualization, circuit breaker status, activity feed
+
+## Project Structure
+
+```
+omni-sentinel/
+├── contracts/                    # Solidity smart contracts (Foundry)
+│   ├── src/
+│   │   ├── RiskOracle.sol        # CRE consumer: AI risk scores
+│   │   ├── PredictionMarket.sol  # CRE consumer: market settlement
+│   │   ├── SafeguardController.sol # CRE consumer: circuit breaker
+│   │   ├── WorldIDVerifier.sol   # World ID ZK proof verification
+│   │   └── interfaces/IReceiver.sol # Chainlink CRE interface
+│   ├── test/                     # Foundry tests
+│   └── script/Deploy.s.sol      # Deployment script
+├── cre-workflows/                # Chainlink CRE workflow code
+│   ├── risk-monitor-workflow/    # Cron-triggered AI risk analysis
+│   ├── market-settler-workflow/  # Event-triggered market settlement
+│   ├── safeguard-trigger-workflow/ # Automated circuit breaker
+│   └── private-risk-monitor-workflow/ # Privacy-preserving risk monitor
+├── frontend/                     # Next.js 14 + thirdweb dashboard
+│   ├── src/app/                  # App Router pages & API routes
+│   ├── src/components/           # React components
+│   └── src/lib/                  # Shared utilities & hooks
+├── test-scenarios/               # Integration test scripts
+└── docs/                         # Documentation
+```
 
 ## Deployments
 
 ### Tenderly Virtual TestNet
-- **VTestNet v2 (active):** Created via Tenderly REST API with auto-rotation support
-- **VTestNet v1 (retired):** [Explorer Link](https://dashboard.tenderly.co/explorer/vnet/69edc2ec-13a2-491f-aa7e-88c38dab91fe/transactions) — 80+ historical transactions
 - **Chain ID:** 73571 (forked from Sepolia)
-- **Auto-Rotation:** When block height limit is reached, a new VTestNet is created via `/api/tenderly/rotate`, contracts are redeployed, and the frontend seamlessly switches over. Old instances remain accessible for historical data.
+- **Auto-Rotation:** VTestNets are automatically created/cleaned via the Tenderly REST API when block limits are reached
+- **Explorer:** Enabled for judges to inspect on-chain transactions
 
-### Contract Addresses (VTestNet v2)
+### Contract Addresses
 | Contract | Address |
 |----------|---------|
 | RiskOracle | `0xDC0Ef4127d33632e76aba237666D8e7927AD5B67` |
@@ -111,126 +203,56 @@ All CRE workflow files and smart contracts that use Chainlink:
 | SafeguardController | `0x8E381ba0A0E5441C73485f9F046A428c3612aD42` |
 | WorldIDVerifier | `0x4f17F1CEc2793ca2e9584D5e956071999eECD790` |
 
-### Contract Addresses (VTestNet v1 — retired)
-| Contract | Address |
-|----------|---------|
-| RiskOracle | `0x245B19D0c4b42654fD7b7BaaCA16E2C74d88e97b` |
-| PredictionMarket | `0x1255d87986784f9999dB996797d896DbD5456881` |
-| SafeguardController | `0x148cef7215C21713F7b0A211703CB0d10bc91239` |
-| WorldIDVerifier | `0x4940C1aaf77658480aD2B2220fC99Ae62795D7D6` |
-
-## World ID Integration
-
-- **Frontend:** IDKit widget (`@worldcoin/idkit`) provides proof generation UI
-- **On-chain:** `WorldIDVerifier.sol` verifies World ID proofs and marks addresses as human-verified
-- **CRE Integration:** Verified status gates prediction market participation, providing sybil resistance
-- **App ID:** `app_omni_sentinel`
-- **Action:** `verify_human`
-
-## Tenderly Virtual TestNet
-
-- Virtual TestNet forked from Sepolia with state sync enabled
-- Public explorer enabled for judges to inspect transactions
-- All smart contracts deployed via Foundry
-- CRE workflow execution validated against the Virtual TestNet
-- Used for safe testing without spending real testnet ETH
-- 80+ on-chain transactions demonstrating full system lifecycle:
-  - 34 RiskOracle updates across 3 protocol IDs (Aave, Compound, Lido)
-  - 7 prediction markets with multi-user YES/NO positions
-  - 8 safeguard circuit breaker state transitions
-  - 4 World ID user verifications
-
-## Testing
-
-Run the automated test suite:
-
-```bash
-cd test-scenarios
-chmod +x run-all-tests.sh
-./run-all-tests.sh
-```
-
-See [test-scenarios/](./test-scenarios/) for detailed test cases, interaction guides, and the quick install guide.
-
-## thirdweb Integration
-
-- `ThirdwebProvider` wraps the entire app for wallet/chain context
-- `ConnectButton` for wallet connection (supports MetaMask, WalletConnect, Coinbase Wallet)
-- `useReadContract` for reading risk scores, market data, safeguard status
-- `useSendTransaction` + `prepareContractCall` for creating markets, taking positions, claiming winnings
-
 ## How to Run
 
 ### Prerequisites
 - Node.js 20+
-- Bun 1.2.21+ (`curl -fsSL https://bun.sh/install | bash`)
+- Bun 1.2+ (`curl -fsSL https://bun.sh/install | bash`)
 - Foundry (`curl -L https://foundry.paradigm.xyz | bash && foundryup`)
-- CRE CLI (download from https://cre.chain.link)
 
-### 1. Clone and Setup
+### Quick Start
 ```bash
-git clone https://github.com/YOUR_USERNAME/omni-sentinel.git
+# Clone
+git clone https://github.com/cryptYP/omni-sentinel.git
 cd omni-sentinel
-```
 
-### 2. Smart Contracts
-```bash
-cd contracts
-forge install
-forge build
-forge test
-```
+# Smart Contracts
+cd contracts && forge install && forge build && forge test
 
-### 3. Deploy to Tenderly
-```bash
-# Set environment variables
-export PRIVATE_KEY=your_private_key
-export TENDERLY_VIRTUAL_TESTNET_RPC=your_tenderly_rpc_url
-export CRE_FORWARDER_ADDRESS=your_forwarder_address
-export WORLD_ID_CONTRACT=world_id_contract_address
-
-# Deploy
-forge script script/Deploy.s.sol --rpc-url $TENDERLY_VIRTUAL_TESTNET_RPC --broadcast --slow
-```
-
-### 4. CRE Workflows
-```bash
-# Authenticate
-cre auth login
-
-# Set secrets
-cre secrets set GEMINI_API_KEY your_gemini_key
-
-# Simulate each workflow
-cd cre-workflows/risk-monitor-workflow
-bun install
-cre workflow simulate risk-monitor-workflow --target staging-settings
-
-cd ../market-settler-workflow
-bun install
-cre workflow simulate market-settler-workflow --target staging-settings
-
-cd ../safeguard-trigger-workflow
-bun install
-cre workflow simulate safeguard-trigger-workflow --target staging-settings
-```
-
-### 5. Frontend
-```bash
-cd frontend
-npm install
+# Frontend
+cd ../frontend && npm install
 cp .env.example .env.local
-# Fill in contract addresses and API keys in .env.local
+# Fill in API keys in .env.local
 npm run dev
 # Open http://localhost:3000
 ```
 
-## Video Demo
-youtube.com [taken away insertion]
+### CRE Workflows
+```bash
+cd cre-workflows/risk-monitor-workflow
+bun install
+cre workflow simulate risk-monitor-workflow --target staging-settings
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Oracle Network | Chainlink CRE (Compute Runtime Environment) |
+| AI Engine | Gemini 2.5 Flash (risk analysis, market settlement) |
+| Smart Contracts | Solidity ^0.8.19, Foundry |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Wallet | thirdweb SDK (ConnectButton, contract interaction) |
+| Identity | World ID (ZK proof sybil resistance) |
+| Testnet | Tenderly Virtual TestNet (forked Sepolia) |
+| Data | DeFi Llama (live TVL, protocol metrics) |
+| Charts | Recharts (Area, Line, Bar, Candlestick) |
 
 ## Team
 YP & AS
 
 ---
 
-Built for the Chainlink Convergence CRE Hackathon 2026.
+Built for the [Chainlink Convergence CRE Hackathon 2026](https://chain.link).
+
+[Repository](https://github.com/cryptYP/omni-sentinel)

@@ -1,1 +1,26 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Environment files (contain API keys — never commit)
+.env
+.env.local
+.env.*.local
+
+# Vercel
 .vercel
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

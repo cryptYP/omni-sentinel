@@ -81,9 +81,14 @@ export function getActiveRpcOverride(): string | null {
 /**
  * Rotate to a new VTestNet. Returns the new VNet info or null on failure.
  */
+export type RotationResult = {
+  vnet: VNetRecord | null;
+  error?: string;
+};
+
 export async function rotateVTestNet(
   reason = "block_limit_reached"
-): Promise<VNetRecord | null> {
+): Promise<RotationResult> {
   try {
     const res = await fetch("/api/tenderly/rotate", {
       method: "POST",
@@ -91,14 +96,13 @@ export async function rotateVTestNet(
       body: JSON.stringify({ reason }),
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error("VTestNet rotation API error:", err);
-      return null;
-    }
+    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
 
-    const data = await res.json();
-    if (!data.success || !data.vnet) return null;
+    if (!res.ok || !data.success || !data.vnet) {
+      const errMsg = data.details || data.error || `API returned ${res.status}`;
+      console.error("VTestNet rotation API error:", errMsg);
+      return { vnet: null, error: errMsg };
+    }
 
     const record: VNetRecord = data.vnet;
     saveVNetRecord(record);
@@ -108,10 +112,11 @@ export async function rotateVTestNet(
       record.publicRpc
     );
 
-    return record;
-  } catch (err) {
-    console.error("VTestNet rotation failed:", err);
-    return null;
+    return { vnet: record };
+  } catch (err: any) {
+    const errMsg = err.message || "Network error";
+    console.error("VTestNet rotation failed:", errMsg);
+    return { vnet: null, error: errMsg };
   }
 }
 
@@ -146,10 +151,10 @@ export async function withAutoRotation<T>(
   } catch (error: any) {
     if (isBlockLimitError(error)) {
       console.warn("[OmniSentinel] Block limit detected, rotating VTestNet...");
-      const vnet = await rotateVTestNet();
-      if (vnet) {
-        onRotated?.(vnet);
-        return { rotated: vnet, error };
+      const result = await rotateVTestNet();
+      if (result.vnet) {
+        onRotated?.(result.vnet);
+        return { rotated: result.vnet, error };
       }
     }
     return { error };

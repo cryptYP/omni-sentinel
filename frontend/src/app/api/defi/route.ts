@@ -20,9 +20,18 @@ const DEFILLAMA_API = "https://defillama-datasets.llama.fi/lite/v2/protocols";
 
 export const revalidate = 300;
 
+// In-memory cache for when DeFi Llama is slow
+let cachedResult: { data: any; timestamp: number } | null = null;
+
 export async function GET() {
   try {
-    const res = await fetch(DEFILLAMA_API, { next: { revalidate: 300 } });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(DEFILLAMA_API, {
+      next: { revalidate: 300 },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error(`DeFi Llama returned ${res.status}`);
 
     const allProtocols = await res.json();
@@ -61,12 +70,18 @@ export async function GET() {
       };
     }).filter(Boolean);
 
-    return NextResponse.json({
+    const response = {
       protocols: results,
       timestamp: Math.floor(Date.now() / 1000),
       source: "DeFi Llama",
-    });
+    };
+    cachedResult = { data: response, timestamp: Date.now() };
+    return NextResponse.json(response);
   } catch (error: any) {
+    // Return cached data if DeFi Llama is slow/down
+    if (cachedResult && Date.now() - cachedResult.timestamp < 600_000) {
+      return NextResponse.json({ ...cachedResult.data, cached: true });
+    }
     return NextResponse.json(
       { error: error.message, protocols: [] },
       { status: 500 }

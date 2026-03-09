@@ -2,15 +2,51 @@
  * Tenderly VTestNet Auto-Rotation API — /api/tenderly/rotate
  *
  * Creates a new Tenderly Virtual TestNet forked from Sepolia when the current
- * one hits its block height limit. Returns new RPC URLs and chain config.
- * The frontend detects block-limit errors and calls this to seamlessly rotate
- * to a fresh VTestNet while the old one remains accessible for historical data.
+ * one hits its block height limit or quota is reached. Automatically deletes
+ * old VTestNets (keeps max 2) before creating a new one to stay within
+ * Tenderly free tier limits.
  *
+ * Prize tracks: Tenderly Virtual TestNets ($5k)
  * Sponsors: Tenderly Virtual TestNets
  */
 import { NextResponse } from "next/server";
 
 const TENDERLY_API = "https://api.tenderly.co/api/v1";
+const MAX_VNETS_TO_KEEP = 2; // Keep at most 2 VTestNets (current + 1 historical)
+
+/**
+ * Delete old VTestNets to free quota. Keeps the newest MAX_VNETS_TO_KEEP.
+ */
+async function cleanupOldVTestNets(accessKey: string, accountSlug: string, projectSlug: string): Promise<number> {
+  try {
+    const listRes = await fetch(
+      `${TENDERLY_API}/account/${accountSlug}/project/${projectSlug}/vnets`,
+      { headers: { "X-Access-Key": accessKey, Accept: "application/json" } }
+    );
+    if (!listRes.ok) return 0;
+
+    const vnets = await listRes.json() as Array<{ id: string; created_at: string; slug: string }>;
+    if (vnets.length <= MAX_VNETS_TO_KEEP) return 0;
+
+    // Sort by created_at descending (newest first), delete all beyond the keep limit
+    const sorted = [...vnets].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const toDelete = sorted.slice(MAX_VNETS_TO_KEEP);
+
+    let deleted = 0;
+    for (const vnet of toDelete) {
+      const delRes = await fetch(
+        `${TENDERLY_API}/account/${accountSlug}/project/${projectSlug}/vnets/${vnet.id}`,
+        { method: "DELETE", headers: { "X-Access-Key": accessKey } }
+      );
+      if (delRes.ok || delRes.status === 204 || delRes.status === 404) deleted++;
+    }
+    console.log(`[OmniSentinel] Cleaned up ${deleted}/${toDelete.length} old VTestNets`);
+    return deleted;
+  } catch (err) {
+    console.warn("VTestNet cleanup failed:", err);
+    return 0;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -27,6 +63,27 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    // Pre-flight: verify API key works before attempting rotation
+    const authCheck = await fetch(
+      `${TENDERLY_API}/account/${accountSlug}/project/${projectSlug}/vnets`,
+      { headers: { "X-Access-Key": accessKey, Accept: "application/json" } }
+    );
+    if (authCheck.status === 401) {
+      return NextResponse.json(
+        { error: "Tenderly API key expired or invalid — generate a new key at dashboard.tenderly.co/account/authorization" },
+        { status: 502 }
+      );
+    }
+    if (authCheck.status === 403) {
+      return NextResponse.json(
+        { error: "Tenderly API key lacks permission for this project" },
+        { status: 502 }
+      );
+    }
+
+    // Clean up old VTestNets before creating a new one (frees quota)
+    const cleaned = await cleanupOldVTestNets(accessKey, accountSlug, projectSlug);
 
     const slug = `omni-sentinel-${Date.now()}`;
     const displayName = `OmniSentinel VTestNet (rotated ${new Date().toISOString().slice(0, 16)})`;
@@ -67,8 +124,15 @@ export async function POST(req: Request) {
     if (!createRes.ok) {
       const errText = await createRes.text();
       console.error("Tenderly API error:", createRes.status, errText);
+      const friendlyMsg = createRes.status === 401
+        ? "Tenderly API key expired or invalid — generate a new key at dashboard.tenderly.co/account/authorization"
+        : createRes.status === 403
+        ? "Tenderly API key lacks permission — check project access settings"
+        : createRes.status === 429
+        ? "Tenderly rate limit hit — wait a minute and retry"
+        : `Tenderly API returned ${createRes.status}`;
       return NextResponse.json(
-        { error: `Tenderly API returned ${createRes.status}`, details: errText },
+        { error: friendlyMsg, details: errText },
         { status: 502 }
       );
     }
@@ -117,8 +181,8 @@ export async function POST(req: Request) {
         explorerUrl: vnet.explorer_page_url ?? null,
         createdAt: new Date().toISOString(),
       },
-      // The old VTestNet URLs still work for reading historical data
-      note: "Old VTestNet remains accessible for historical transaction data. Update RPC URL in your environment to use the new VTestNet.",
+      cleanedUp: cleaned,
+      note: "Old VTestNets auto-deleted to stay within quota. Update RPC URL in your environment to use the new VTestNet.",
     });
   } catch (error: any) {
     console.error("VTestNet rotation failed:", error);

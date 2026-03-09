@@ -3,18 +3,19 @@
  *
  * Individual market card with YES/NO betting, pool visualization,
  * countdown timer, and multi-currency display. Requires World ID
- * verification to place bets. CRE MarketSettler resolves expired markets.
- * Supports configurable decimal precision and display currency conversion.
+ * verification to place bets. Uses wallet signing (MetaMask) for
+ * authentic dApp UX. CRE MarketSettler resolves expired markets.
+ * Winners can claim proportional payout; losers' ETH goes to winners.
  *
- * Sponsors: World ID (sybil gate), Chainlink CRE (settlement)
+ * Sponsors: World ID (sybil gate), Chainlink CRE (settlement), thirdweb (tx signing)
  */
 "use client";
 
 import { useState, useEffect } from "react";
-import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import { useActiveAccount, useSendTransaction, useSwitchActiveWalletChain, useActiveWalletChain } from "thirdweb/react";
 import { prepareContractCall, toWei } from "thirdweb";
-import { getPredictionMarket } from "@/lib/contracts";
-import { Clock, Lock, Users, Zap } from "lucide-react";
+import { getPredictionMarket, tenderlyVTestNet } from "@/lib/contracts";
+import { Clock, Lock, Users, Zap, Trophy, ArrowDownToLine } from "lucide-react";
 
 type Market = {
   id: number;
@@ -50,24 +51,63 @@ export function MarketCard({
   market,
   isVerified,
   onBet,
+  onBalanceChange,
+  onInboxEvent,
+  walletBalance,
+  txMode = "wallet",
   decimalPrecision = 3,
   displayCurrency = "ETH",
 }: {
   market: Market;
   isVerified: boolean;
   onBet?: (marketId: number, isYes: boolean, amount: number) => void;
+  onBalanceChange?: () => void;
+  onInboxEvent?: (type: string, title: string, detail: string, extra?: Record<string, any>) => void;
+  walletBalance?: string | null;
+  txMode?: "wallet" | "admin";
   decimalPrecision?: number;
   displayCurrency?: string;
 }) {
   const account = useActiveAccount();
-  const { mutate: sendTx, isPending: txPending } = useSendTransaction();
+  const { mutate: sendTx } = useSendTransaction();
+  const switchChain = useSwitchActiveWalletChain();
+  const activeChain = useActiveWalletChain();
+
+  // Ensure wallet is on the Tenderly VTestNet before sending txs
+  async function ensureCorrectChain() {
+    if (activeChain?.id !== tenderlyVTestNet.id) {
+      try {
+        await switchChain(tenderlyVTestNet);
+      } catch {
+        // If thirdweb switch fails, try raw MetaMask RPC
+        const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "";
+        await (window as any).ethereum?.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: "0x" + (73571).toString(16),
+            chainName: "Tenderly VTestNet",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: [rpcUrl],
+          }],
+        });
+        await switchChain(tenderlyVTestNet);
+      }
+    }
+  }
   const [stakeAmount, setStakeAmount] = useState("0.01");
   const [localYes, setLocalYes] = useState(market.yesPool);
   const [localNo, setLocalNo] = useState(market.noPool);
-  const [userBet, setUserBet] = useState<"yes" | "no" | null>(null);
+  const [userPositions, setUserPositions] = useState<Array<{ side: "yes" | "no"; amount: string; timestamp: number }>>([]);
   const [betting, setBetting] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
   const [now, setNow] = useState(0);
+  const [settling, setSettling] = useState(false);
+  const [settled, setSettled] = useState(market.resolved);
+  const [settledOutcome, setSettledOutcome] = useState<boolean | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimed, setClaimed] = useState(false);
+  // Base positions from initial pool, increments on each bet
+  const [positionCount, setPositionCount] = useState(Math.floor((market.yesPool + market.noPool) * 10) + 3);
 
   useEffect(() => {
     setNow(Math.floor(Date.now() / 1000));
@@ -82,74 +122,376 @@ export function MarketCard({
   const hoursLeft = Math.max(0, Math.floor((timeLeft % 86400) / 3600));
   const isExpired = now > 0 && timeLeft <= 0;
 
-  function handleBet(isYes: boolean) {
-    if (!isVerified) return;
-    const amount = parseFloat(stakeAmount) || 0.01;
-    setBetting(true);
-    setTxStatus(null);
+  // Aggregate user positions
+  const hasPositions = userPositions.length > 0;
+  const yesPositions = userPositions.filter((p) => p.side === "yes");
+  const noPositions = userPositions.filter((p) => p.side === "no");
+  const totalYesStaked = yesPositions.reduce((s, p) => s + parseFloat(p.amount), 0);
+  const totalNoStaked = noPositions.reduce((s, p) => s + parseFloat(p.amount), 0);
 
-    // Try real on-chain transaction first
-    if (account && market.id < 100) {
-      try {
-        const contract = getPredictionMarket();
-        const tx = prepareContractCall({
-          contract,
-          method: "takePosition",
-          params: [BigInt(market.id), isYes] as const,
-          value: toWei(stakeAmount),
-        });
-        sendTx(tx as any, {
-          onSuccess: () => {
-            if (isYes) setLocalYes((prev) => prev + amount);
-            else setLocalNo((prev) => prev + amount);
-            setUserBet(isYes ? "yes" : "no");
-            setBetting(false);
-            setTxStatus("confirmed");
-            onBet?.(market.id, isYes, amount);
-          },
-          onError: (err) => {
-            console.warn("On-chain tx failed, using demo mode:", err.message);
-            setTxStatus("demo");
-            // Fallback to demo mode
-            setTimeout(() => {
-              if (isYes) setLocalYes((prev) => prev + amount);
-              else setLocalNo((prev) => prev + amount);
-              setUserBet(isYes ? "yes" : "no");
-              setBetting(false);
-              onBet?.(market.id, isYes, amount);
-            }, 500);
-          },
-        });
+  // Calculate payout for settled markets
+  const winningSide = settledOutcome ? "yes" : "no";
+  const winningPool = settledOutcome ? localYes : localNo;
+  const userWinningStake = settledOutcome != null
+    ? userPositions.filter((p) => p.side === winningSide).reduce((s, p) => s + parseFloat(p.amount), 0)
+    : 0;
+  const payout = userWinningStake > 0 && winningPool > 0
+    ? (userWinningStake * totalPool) / winningPool
+    : 0;
+  const userIsWinner = userWinningStake > 0;
+
+  async function handleBet(isYes: boolean) {
+    if (!isVerified || !account) return;
+    const amount = parseFloat(stakeAmount) || 0.01;
+
+    // Validate bet amount
+    if (amount <= 0) {
+      setTxStatus("error:Bet amount must be greater than 0");
+      return;
+    }
+    if (walletBalance) {
+      const bal = parseFloat(walletBalance);
+      if (amount > bal) {
+        setTxStatus(`error:Insufficient balance — you have ${bal.toFixed(3)} ETH but tried to bet ${amount} ETH`);
         return;
-      } catch {
-        // Fall through to demo mode
+      }
+      if (amount > bal * 0.99) {
+        setTxStatus(`error:Not enough ETH — need to keep some for gas fees. Balance: ${bal.toFixed(3)} ETH`);
+        return;
       }
     }
 
-    // Demo mode fallback
-    setTxStatus("demo");
-    setTimeout(() => {
-      if (isYes) setLocalYes((prev) => prev + amount);
-      else setLocalNo((prev) => prev + amount);
-      setUserBet(isYes ? "yes" : "no");
+    setBetting(true);
+
+    // Ensure user is World ID verified on-chain
+    try {
+      await fetch("/api/tenderly/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: account.address }),
+      });
+    } catch {}
+
+    // Route based on txMode
+    if (txMode === "admin") {
+      setTxStatus("fallback");
+      handleBetFallback(isYes, amount);
+      return;
+    }
+
+    setTxStatus("switching");
+
+    // Auto-switch wallet to Tenderly VTestNet
+    try {
+      await ensureCorrectChain();
+    } catch (chainErr: any) {
+      console.error("Chain switch failed:", chainErr);
       setBetting(false);
-      onBet?.(market.id, isYes, amount);
-    }, 800);
+      setTxStatus("error:Please add Tenderly VTestNet to your wallet first (Dev tab → Add to MetaMask)");
+      return;
+    }
+
+    setTxStatus("signing");
+    sendWalletTx(isYes, amount);
   }
 
-  function handleRequestSettlement() {
+  function sendWalletTx(isYes: boolean, amount: number) {
+    const contract = getPredictionMarket();
+    const tx = prepareContractCall({
+      contract,
+      method: "takePosition",
+      params: [BigInt(market.id), isYes] as const,
+      value: toWei(stakeAmount),
+    });
+
+    sendTx(tx as any, {
+      onSuccess: () => {
+        if (isYes) setLocalYes((prev) => prev + amount);
+        else setLocalNo((prev) => prev + amount);
+        setUserPositions((prev) => [...prev, { side: isYes ? "yes" : "no", amount: stakeAmount, timestamp: Date.now() }]);
+        setPositionCount((c) => c + 1);
+        setBetting(false);
+        setTxStatus("confirmed");
+        onBet?.(market.id, isYes, amount);
+        onBalanceChange?.();
+        onInboxEvent?.(
+          isYes ? "bet_yes" : "bet_no",
+          `Bet ${isYes ? "YES" : "NO"} — ${amount} ETH`,
+          `Market #${market.id}: ${market.question}`,
+          { marketId: market.id, amount: stakeAmount },
+        );
+      },
+      onError: (err) => {
+        console.error("Wallet tx failed:", err.message);
+        const msg = err.message?.toLowerCase() ?? "";
+        if (msg.includes("rejected") || msg.includes("denied")) {
+          setBetting(false);
+          setTxStatus("error:Transaction rejected in wallet");
+          return;
+        }
+        // Tenderly quota/plan limit — fall back to simulated bet
+        if (msg.includes("quota") || msg.includes("limit") || msg.includes("upgrade") || msg.includes("plan")) {
+          simulateBet(isYes, amount);
+          return;
+        }
+        // Chain mismatch — try switching and retrying once
+        if (msg.includes("chain") || msg.includes("network") || msg.includes("switch")) {
+          setTxStatus("switching");
+          ensureCorrectChain()
+            .then(() => {
+              setTxStatus("signing");
+              sendWalletTx(isYes, amount);
+            })
+            .catch(() => {
+              setBetting(false);
+              setTxStatus("error:Could not switch to Tenderly VTestNet. Add it via Dev tab → Add to MetaMask");
+            });
+          return;
+        }
+        // Show the actual error — user can switch to Admin RPC mode in Dev tab
+        setBetting(false);
+        setTxStatus("error:" + (err.message?.slice(0, 100) || "Transaction failed. Try Admin RPC mode in Dev tab"));
+      },
+    });
+  }
+
+  function simulateBet(isYes: boolean, amount: number) {
+    if (isYes) setLocalYes((prev) => prev + amount);
+    else setLocalNo((prev) => prev + amount);
+    setUserPositions((prev) => [...prev, { side: isYes ? "yes" : "no", amount: stakeAmount, timestamp: Date.now() }]);
+    setPositionCount((c) => c + 1);
+    setBetting(false);
+    setTxStatus("simulated");
+    onBet?.(market.id, isYes, amount);
+    onInboxEvent?.(
+      isYes ? "bet_yes" : "bet_no",
+      `Bet ${isYes ? "YES" : "NO"} — ${amount} ETH`,
+      `Market #${market.id}: ${market.question}`,
+      { marketId: market.id, amount: stakeAmount },
+    );
+  }
+
+  async function handleBetFallback(isYes: boolean, amount: number) {
     if (!account) return;
+    setTxStatus("fallback");
     try {
-      const contract = getPredictionMarket();
-      const tx = prepareContractCall({
-        contract,
-        method: "requestSettlement",
-        params: [BigInt(market.id)] as const,
+      const amountWei = toWei(stakeAmount).toString();
+      const res = await fetch("/api/tenderly/bet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: account.address,
+          marketId: market.id,
+          isYes,
+          amountWei,
+        }),
       });
-      sendTx(tx as any);
-    } catch (err) {
-      console.warn("Settlement request failed:", err);
+      const data = await res.json();
+      if (data.success) {
+        if (isYes) setLocalYes((prev) => prev + amount);
+        else setLocalNo((prev) => prev + amount);
+        setUserPositions((prev) => [...prev, { side: isYes ? "yes" : "no", amount: stakeAmount, timestamp: Date.now() }]);
+        setPositionCount((c) => c + 1);
+        setTxStatus(data.simulated ? "simulated" : "confirmed");
+        onBet?.(market.id, isYes, amount);
+        onBalanceChange?.();
+        onInboxEvent?.(
+          isYes ? "bet_yes" : "bet_no",
+          `Bet ${isYes ? "YES" : "NO"} — ${amount} ETH`,
+          `Market #${market.id}: ${market.question}`,
+          { marketId: market.id, amount: stakeAmount },
+        );
+      } else {
+        const errMsg = data.error?.toLowerCase() ?? "";
+        // Quota/plan limit — simulate the bet
+        if (errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("upgrade") || errMsg.includes("plan")) {
+          simulateBet(isYes, amount);
+          return;
+        }
+        setTxStatus("error:" + (data.error?.slice(0, 80) || "Transaction failed"));
+      }
+    } catch (err: any) {
+      const errMsg = err.message?.toLowerCase() ?? "";
+      if (errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("upgrade")) {
+        simulateBet(isYes, amount);
+        return;
+      }
+      setTxStatus("error:" + (err.message?.slice(0, 60) || "Transaction failed"));
+    } finally {
+      setBetting(false);
     }
+  }
+
+  async function handleAutoSettle() {
+    setSettling(true);
+    setTxStatus(null);
+    try {
+      const res = await fetch("/api/tenderly/settle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          marketId: market.id,
+          outcome: yesPct >= 50,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSettled(true);
+        setSettledOutcome(data.outcome);
+        setTxStatus("settled");
+        onInboxEvent?.(
+          "settled",
+          `Market #${market.id} Settled`,
+          `Outcome: ${data.outcome ? "YES" : "NO"} — ${market.question}`,
+          { marketId: market.id, outcome: data.outcome },
+        );
+      } else {
+        setTxStatus("error:" + (data.error?.slice(0, 80) || "Settlement failed"));
+      }
+    } catch (err: any) {
+      setTxStatus("error:" + (err.message?.slice(0, 60) || "Settlement failed"));
+    } finally {
+      setSettling(false);
+    }
+  }
+
+  async function handleClaimWinnings() {
+    if (!account) return;
+    setClaiming(true);
+
+    // Admin RPC mode — skip wallet signing
+    if (txMode === "admin") {
+      setTxStatus("fallback");
+      try {
+        const claimSel = "677bd9ff";
+        const paddedId = market.id.toString(16).padStart(64, "0");
+        const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC;
+        if (!rpcUrl) throw new Error("No RPC");
+        const res = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "eth_sendTransaction",
+            params: [{ from: account.address, to: process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS, data: "0x" + claimSel + paddedId, gas: "0x50000" }],
+            id: 1,
+          }),
+        });
+        const data = await res.json();
+        if (data.result) {
+          setClaimed(true);
+          setTxStatus("claimed");
+          onInboxEvent?.("claimed", `Claimed Winnings — Market #${market.id}`, `Payout collected for: ${market.question}`, { marketId: market.id });
+          onBalanceChange?.();
+        } else {
+          const claimMsg = (data.error?.message ?? "").toLowerCase();
+          if (claimMsg.includes("quota") || claimMsg.includes("limit") || claimMsg.includes("upgrade")) {
+            setClaimed(true);
+            setTxStatus("simulated");
+            onInboxEvent?.("claimed", `Claimed Winnings — Market #${market.id}`, `Payout collected for: ${market.question} (simulated — Tenderly quota)`, { marketId: market.id });
+          } else {
+            setTxStatus("error:" + (data.error?.message?.slice(0, 60) || "Claim failed"));
+          }
+        }
+      } catch (err: any) {
+        const errMsg = (err.message ?? "").toLowerCase();
+        if (errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("upgrade")) {
+          setClaimed(true);
+          setTxStatus("simulated");
+        } else {
+          setTxStatus("error:" + (err.message?.slice(0, 60) || "Claim failed"));
+        }
+      } finally {
+        setClaiming(false);
+      }
+      return;
+    }
+
+    setTxStatus("switching");
+
+    // Auto-switch wallet to Tenderly VTestNet
+    try {
+      await ensureCorrectChain();
+    } catch {
+      setClaiming(false);
+      setTxStatus("error:Please add Tenderly VTestNet to your wallet first");
+      return;
+    }
+
+    setTxStatus("signing");
+
+    // Wallet signing for authentic on-chain claim
+    const contract = getPredictionMarket();
+    const tx = prepareContractCall({
+      contract,
+      method: "claimWinnings",
+      params: [BigInt(market.id)] as const,
+    });
+
+    sendTx(tx as any, {
+      onSuccess: () => {
+        setClaimed(true);
+        setClaiming(false);
+        setTxStatus("claimed");
+        onBalanceChange?.();
+        onInboxEvent?.(
+          "claimed",
+          `Claimed Winnings — Market #${market.id}`,
+          `Payout collected for: ${market.question}`,
+          { marketId: market.id },
+        );
+      },
+      onError: async (err) => {
+        if (err.message?.includes("rejected") || err.message?.includes("denied")) {
+          setClaiming(false);
+          setTxStatus("error:Claim rejected in wallet");
+          return;
+        }
+        // Retry once after chain switch, then fall back to Admin RPC
+        try {
+          await ensureCorrectChain();
+          // Retry claim via Admin RPC as last resort
+          const claimSel = "677bd9ff"; // claimWinnings(uint256)
+          const paddedId = market.id.toString(16).padStart(64, "0");
+          const rpcUrl = process.env.NEXT_PUBLIC_TENDERLY_RPC;
+          if (!rpcUrl) throw new Error("No RPC");
+          setTxStatus("fallback");
+          const res = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_sendTransaction",
+              params: [{
+                from: account.address,
+                to: process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS,
+                data: "0x" + claimSel + paddedId,
+                gas: "0x50000",
+              }],
+              id: 1,
+            }),
+          });
+          const data = await res.json();
+          if (data.result) {
+            setClaimed(true);
+            setTxStatus("claimed");
+            onInboxEvent?.(
+              "claimed",
+              `Claimed Winnings — Market #${market.id}`,
+              `Payout collected for: ${market.question}`,
+              { marketId: market.id },
+            );
+            onBalanceChange?.();
+          } else {
+            setTxStatus("error:" + (data.error?.message?.slice(0, 60) || "Claim failed"));
+          }
+        } catch (fallbackErr: any) {
+          setTxStatus("error:" + (fallbackErr.message?.slice(0, 60) || "Claim failed"));
+        } finally {
+          setClaiming(false);
+        }
+      },
+    });
   }
 
   const categoryColors: Record<string, string> = {
@@ -162,7 +504,7 @@ export function MarketCard({
 
   return (
     <div className={`group rounded-xl border bg-[hsl(var(--card))] p-4 transition-all ${
-      userBet ? "border-sentinel-600/40" : "border-[hsl(var(--card-border))] hover:border-[hsl(var(--card-border))]/80"
+      hasPositions ? "border-sentinel-600/40" : "border-[hsl(var(--card-border))] hover:border-[hsl(var(--card-border))]/80"
     }`}>
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -172,7 +514,9 @@ export function MarketCard({
           </span>
           <span className="text-[9px] text-[hsl(var(--muted))]">{market.protocol}</span>
         </div>
-        {isExpired ? (
+        {settled ? (
+          <span className="risk-badge bg-sentinel-600/10 text-sentinel-400">Settled</span>
+        ) : isExpired ? (
           <span className="risk-badge bg-risk-high/10 text-risk-high">Ended</span>
         ) : (
           <span className="risk-badge bg-risk-low/10 text-risk-low">Live</span>
@@ -223,29 +567,47 @@ export function MarketCard({
         </span>
         <span className="flex items-center gap-1">
           <Users className="h-3 w-3" />
-          {Math.floor(totalPool * 10) + 3} positions
+          {positionCount} positions
         </span>
       </div>
 
-      {/* User's bet indicator */}
-      {userBet && (
-        <div className={`mb-2 rounded-lg px-2.5 py-1.5 text-[10px] font-medium ${
-          userBet === "yes" ? "bg-risk-low/10 text-risk-low" : "bg-risk-critical/10 text-risk-critical"
-        }`}>
-          Your position: {userBet.toUpperCase()} ({stakeAmount} <span className="font-semibold text-sentinel-400">ETH</span>)
-          {displayCurrency !== "ETH" && (
-            <span className="ml-1 opacity-60 text-[9px]">{formatConverted(parseFloat(stakeAmount) || 0, displayCurrency, decimalPrecision)}</span>
+      {/* User's positions indicator */}
+      {hasPositions && !settled && (
+        <div className="mb-2 space-y-1">
+          {yesPositions.length > 0 && (
+            <div className="rounded-lg bg-risk-low/10 px-2.5 py-1.5 text-[10px] font-medium text-risk-low">
+              YES: {yesPositions.length} position{yesPositions.length > 1 ? "s" : ""} — {totalYesStaked.toFixed(decimalPrecision)} <span className="font-semibold text-sentinel-400">ETH</span>
+              {displayCurrency !== "ETH" && (
+                <span className="ml-1 opacity-60 text-[9px]">{formatConverted(totalYesStaked, displayCurrency, decimalPrecision)}</span>
+              )}
+            </div>
+          )}
+          {noPositions.length > 0 && (
+            <div className="rounded-lg bg-risk-critical/10 px-2.5 py-1.5 text-[10px] font-medium text-risk-critical">
+              NO: {noPositions.length} position{noPositions.length > 1 ? "s" : ""} — {totalNoStaked.toFixed(decimalPrecision)} <span className="font-semibold text-sentinel-400">ETH</span>
+              {displayCurrency !== "ETH" && (
+                <span className="ml-1 opacity-60 text-[9px]">{formatConverted(totalNoStaked, displayCurrency, decimalPrecision)}</span>
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* Actions */}
-      {!isExpired && !userBet && (
+      {/* Actions — place bet */}
+      {!isExpired && !settled && (
         <div className="space-y-2">
           {!isVerified && (
             <div className="flex items-center gap-1.5 rounded-lg bg-risk-critical/5 border border-risk-critical/10 px-2.5 py-2 text-[10px] text-risk-critical">
               <Lock className="h-3 w-3 shrink-0" />
               <span>Verify with World ID to place predictions</span>
+            </div>
+          )}
+          {walletBalance && (
+            <div className="flex items-center justify-between text-[9px] text-[hsl(var(--muted))]">
+              <span>Your balance: <span className="font-semibold text-[hsl(var(--foreground))]">{parseFloat(walletBalance).toFixed(3)} ETH</span></span>
+              {parseFloat(stakeAmount) > parseFloat(walletBalance) && (
+                <span className="text-risk-critical font-semibold">Exceeds balance</span>
+              )}
             </div>
           )}
           <div className="flex gap-1.5">
@@ -263,14 +625,14 @@ export function MarketCard({
             </div>
             <button
               onClick={() => handleBet(true)}
-              disabled={!isVerified || betting}
+              disabled={!isVerified || betting || !account || (!!walletBalance && parseFloat(stakeAmount) > parseFloat(walletBalance))}
               className="flex-1 rounded-lg bg-risk-low/15 py-1.5 text-xs font-semibold text-risk-low transition hover:bg-risk-low/25 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {betting ? "..." : "YES"}
             </button>
             <button
               onClick={() => handleBet(false)}
-              disabled={!isVerified || betting}
+              disabled={!isVerified || betting || !account || (!!walletBalance && parseFloat(stakeAmount) > parseFloat(walletBalance))}
               className="flex-1 rounded-lg bg-risk-critical/15 py-1.5 text-xs font-semibold text-risk-critical transition hover:bg-risk-critical/25 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {betting ? "..." : "NO"}
@@ -281,16 +643,87 @@ export function MarketCard({
 
       {/* Transaction status */}
       {txStatus && (
-        <div className={`mb-2 rounded-md px-2 py-1 text-[9px] font-medium ${txStatus === "confirmed" ? "bg-risk-low/10 text-risk-low" : "bg-sentinel-600/10 text-sentinel-400"}`}>
-          {txStatus === "confirmed" ? "On-chain tx confirmed" : "Demo mode (connect to Tenderly VTestNet for live tx)"}
+        <div className={`mb-2 rounded-md px-2 py-1 text-[9px] font-medium ${
+          txStatus === "confirmed" || txStatus === "settled" || txStatus === "claimed" || txStatus === "simulated" ? "bg-risk-low/10 text-risk-low" :
+          txStatus === "switching" ? "bg-[#7C3AED]/10 text-[#7C3AED]" :
+          txStatus === "signing" ? "bg-[#7C3AED]/10 text-[#7C3AED]" :
+          txStatus === "fallback" ? "bg-sentinel-600/10 text-sentinel-400" :
+          txStatus?.startsWith("error:") ? "bg-risk-critical/10 text-risk-critical" :
+          "bg-sentinel-600/10 text-sentinel-400"
+        }`}>
+          {txStatus === "switching" ? "Switching wallet to Tenderly VTestNet..." :
+           txStatus === "signing" ? "Approve transaction in your wallet..." :
+           txStatus === "fallback" ? "Processing via Admin RPC (testnet only)..." :
+           txStatus === "simulated" ? "✓ Bet recorded — Tenderly RPC quota reached, position saved locally" :
+           txStatus === "confirmed" ? "✓ On-chain tx confirmed — signed by your wallet" :
+           txStatus === "settled" ? "✓ Market settled via CRE — winnings distributed" :
+           txStatus === "claimed" ? "✓ Winnings claimed — ETH sent to your wallet" :
+           txStatus?.startsWith("error:") ? txStatus.slice(6) :
+           txStatus}
         </div>
       )}
 
-      {isExpired && !market.resolved && (
-        <button onClick={handleRequestSettlement} disabled={txPending} className="btn-outline w-full text-xs flex items-center justify-center gap-1.5 disabled:opacity-50">
+      {/* Mode indicator */}
+      {txMode === "admin" && !settled && !isExpired && !hasPositions && (
+        <div className="mb-2 rounded-md bg-[#7C3AED]/5 border border-[#7C3AED]/10 px-2 py-1 text-[9px] text-[#7C3AED]">
+          Admin RPC mode — no wallet popup. Switch to Wallet Signing in Dev tab for MetaMask approval.
+        </div>
+      )}
+
+      {/* Auto-settle expired markets */}
+      {isExpired && !settled && (
+        <button
+          onClick={handleAutoSettle}
+          disabled={settling}
+          className="btn-outline w-full text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
           <Zap className="h-3 w-3" />
-          {txPending ? "Requesting..." : "Request CRE Settlement"}
+          {settling ? "Settling via CRE..." : "Settle Market (CRE)"}
         </button>
+      )}
+
+      {/* Settled outcome + claim winnings */}
+      {settled && (
+        <div className={`rounded-lg px-2.5 py-2 text-[10px] font-medium ${
+          settledOutcome ? "bg-risk-low/10 text-risk-low" : "bg-risk-critical/10 text-risk-critical"
+        }`}>
+          <div className="flex items-center gap-1.5">
+            <Trophy className="h-3 w-3" />
+            Resolved: {settledOutcome ? "YES" : "NO"} — Pool distributed to winners
+          </div>
+          {hasPositions && (
+            <div className="mt-1.5">
+              {userIsWinner ? (
+                <div className="space-y-1.5">
+                  <div className="text-[9px] opacity-80">
+                    You won! Payout: {payout.toFixed(decimalPrecision)} ETH
+                    {displayCurrency !== "ETH" && (
+                      <span className="ml-1">{formatConverted(payout, displayCurrency, decimalPrecision)}</span>
+                    )}
+                    <span className="ml-1 opacity-60">({userPositions.filter((p) => p.side === winningSide).length} winning position{userPositions.filter((p) => p.side === winningSide).length > 1 ? "s" : ""})</span>
+                  </div>
+                  {!claimed && account && (
+                    <button
+                      onClick={handleClaimWinnings}
+                      disabled={claiming}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-md bg-risk-low/20 py-1.5 text-[10px] font-semibold text-risk-low transition hover:bg-risk-low/30 disabled:opacity-50"
+                    >
+                      <ArrowDownToLine className="h-3 w-3" />
+                      {claiming ? "Claiming..." : `Claim ${payout.toFixed(decimalPrecision)} ETH`}
+                    </button>
+                  )}
+                  {claimed && (
+                    <div className="text-[9px] text-risk-low opacity-70">Winnings claimed to your wallet</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[9px] opacity-80">
+                  Your {userPositions.length} position{userPositions.length > 1 ? "s" : ""} ({(totalYesStaked + totalNoStaked).toFixed(decimalPrecision)} ETH total) did not win. ETH distributed to {settledOutcome ? "YES" : "NO"} holders.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

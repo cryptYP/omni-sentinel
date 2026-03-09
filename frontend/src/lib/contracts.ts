@@ -11,11 +11,12 @@ import { defineChain } from "thirdweb/chains";
 import { client } from "./thirdweb";
 
 // Tenderly Virtual TestNet (Chain ID 73571)
+// Uses env var so RPC URL stays in sync after VTestNet rotation
 export const tenderlyVTestNet = defineChain({
   id: 73571,
   name: "Tenderly Virtual TestNet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpc: "https://virtual.sepolia.eu.rpc.tenderly.co/a3230981-0711-4cf8-a0cc-4fec31158ab8",
+  rpc: process.env.NEXT_PUBLIC_TENDERLY_RPC ?? "https://virtual.sepolia.eu.rpc.tenderly.co/094fa981-eb59-42d5-980d-4fd05ccde99c",
   testnet: true,
 });
 
