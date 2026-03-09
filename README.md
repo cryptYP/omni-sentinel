@@ -6,7 +6,7 @@
 
 ## What is OmniSentinel?
 
-OmniSentinel is an autonomous DeFi safety system that uses Chainlink's Compute Runtime Environment (CRE) to continuously monitor protocol health, generate AI-driven risk scores, settle prediction markets, and trigger circuit breakers — all on-chain, all trustless.
+OmniSentinel is an autonomous DeFi safety system that uses Chainlink's Compute Runtime Environment (CRE) to continuously monitor protocol health, generate AI-driven risk scores, settle prediction markets, and trigger circuit breakers. All on-chain, all trustless.
 
 The protocol solves a critical gap in DeFi: there is no standardized, automated, on-chain mechanism to assess cross-protocol risk in real time and take protective action before cascading failures occur. Manual monitoring doesn't scale, centralized risk feeds introduce trust assumptions, and existing circuit breakers are protocol-specific with no cross-chain visibility.
 
@@ -14,7 +14,7 @@ OmniSentinel fixes this by combining:
 - **Chainlink CRE workflows** that run on a decentralized oracle network (DON) with multi-node consensus
 - **Gemini AI** for intelligent risk analysis beyond simple threshold checks
 - **On-chain circuit breakers** that autonomously pause, limit, or emergency-halt based on risk scores
-- **Prediction markets** where users bet on DeFi safety events, settled by CRE + AI with World ID sybil resistance
+- **Prediction markets** where users bet on DeFi safety events, settled by CRE + AI with World ID sybil resistance. Also building a community that relies on trust and safety within ecosystems and vividly displays confidence in protocols and systems.
 
 ## How It Works
 
